@@ -51,7 +51,21 @@ export function humanBytes(b: number): string {
   return `${(mb / 1024).toFixed(2)} GB`;
 }
 
+// The full-bucket scan costs seconds and grows with every photo; totals don't
+// need per-second freshness, so memoize per server instance for 5 minutes.
+const STORAGE_TTL_MS = 5 * 60 * 1000;
+let storageCache: { data: StorageData; at: number } | null = null;
+
 export async function fetchStorage(): Promise<StorageData> {
+  if (storageCache && Date.now() - storageCache.at < STORAGE_TTL_MS) {
+    return storageCache.data;
+  }
+  const data = await scanStorage();
+  storageCache = { data, at: Date.now() };
+  return data;
+}
+
+async function scanStorage(): Promise<StorageData> {
   const client = r2();
   const bucket = process.env.R2_BUCKET || "propia-photos";
 
