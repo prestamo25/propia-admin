@@ -69,12 +69,21 @@ export default async function BrokerPage({
         {/* Profile header */}
         <div className="mb-8 rounded-2xl border border-black/[0.05] bg-gradient-to-b from-white to-neutral-50/40 p-6 shadow-soft backdrop-blur-sm">
           <div className="flex flex-wrap items-start gap-5">
-            <span
-              className="grid h-16 w-16 shrink-0 place-items-center rounded-2xl text-xl font-semibold"
-              style={{ background: c.bg, color: c.fg }}
-            >
-              {initials(broker.name)}
-            </span>
+            {broker.avatar_url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={broker.avatar_url}
+                alt=""
+                className="h-16 w-16 shrink-0 rounded-2xl object-cover ring-1 ring-black/[0.06]"
+              />
+            ) : (
+              <span
+                className="grid h-16 w-16 shrink-0 place-items-center rounded-2xl text-xl font-semibold"
+                style={{ background: c.bg, color: c.fg }}
+              >
+                {initials(broker.name)}
+              </span>
+            )}
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2.5">
                 <h1 className="text-2xl font-semibold tracking-tight text-neutral-900">

@@ -9,6 +9,7 @@ export type BrokerRow = {
   status: string | null;
   created_at: string | null;
   last_active: string | null;
+  avatar_url: string | null;
   inventory: number;
   // MB used (R2 storage) — not yet wired; photos live in Cloudflare R2, not
   // Postgres, so this needs a separate R2-prefix sum. null = "—" for now.
@@ -42,7 +43,7 @@ export async function fetchOverview(): Promise<Overview> {
     sb
       .from("users")
       .select(
-        "id, name, first_name, last_name, company, phone, states, status, created_at, last_active",
+        "id, name, first_name, last_name, company, phone, states, status, created_at, last_active, avatar_url",
       )
       .order("created_at", { ascending: false }),
     sb.from("properties").select("user_id"),
@@ -78,6 +79,7 @@ export async function fetchOverview(): Promise<Overview> {
       status: string | null;
       created_at: string | null;
       last_active: string | null;
+      avatar_url: string | null;
     };
     const full =
       [row.first_name, row.last_name].filter(Boolean).join(" ").trim() ||
@@ -92,6 +94,7 @@ export async function fetchOverview(): Promise<Overview> {
       status: row.status,
       created_at: row.created_at,
       last_active: row.last_active,
+      avatar_url: row.avatar_url,
       inventory: counts.get(row.id) ?? 0,
       mb_used: null,
       blocked: banned.get(row.id) ?? false,
@@ -139,6 +142,7 @@ export type BrokerDetail = {
   status: string | null;
   created_at: string | null;
   last_active: string | null;
+  avatar_url: string | null;
   blocked: boolean;
   listings: Listing[];
 };
@@ -150,7 +154,7 @@ export async function fetchBroker(id: string): Promise<BrokerDetail | null> {
     sb
       .from("users")
       .select(
-        "id, name, first_name, last_name, company, phone, states, status, created_at, last_active",
+        "id, name, first_name, last_name, company, phone, states, status, created_at, last_active, avatar_url",
       )
       .eq("id", id)
       .maybeSingle(),
@@ -179,6 +183,7 @@ export async function fetchBroker(id: string): Promise<BrokerDetail | null> {
     status: string | null;
     created_at: string | null;
     last_active: string | null;
+    avatar_url: string | null;
   };
 
   const full =
@@ -229,6 +234,7 @@ export async function fetchBroker(id: string): Promise<BrokerDetail | null> {
     status: u.status,
     created_at: u.created_at,
     last_active: u.last_active,
+    avatar_url: u.avatar_url,
     blocked: isBanned(authRes.data?.user?.banned_until),
     listings,
   };

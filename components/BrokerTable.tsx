@@ -150,12 +150,21 @@ export function BrokerTable({ brokers }: { brokers: BrokerRow[] }) {
                 >
                   <Td>
                     <div className="flex items-center gap-3">
-                      <span
-                        className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-xs font-semibold"
-                        style={{ background: c.bg, color: c.fg }}
-                      >
-                        {initials(b.name)}
-                      </span>
+                      {b.avatar_url ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={b.avatar_url}
+                          alt=""
+                          className="h-9 w-9 shrink-0 rounded-full object-cover ring-1 ring-black/[0.06]"
+                        />
+                      ) : (
+                        <span
+                          className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-xs font-semibold"
+                          style={{ background: c.bg, color: c.fg }}
+                        >
+                          {initials(b.name)}
+                        </span>
+                      )}
                       <div className="min-w-0">
                         <div className="truncate font-medium text-neutral-900 group-hover:text-brand">
                           {b.name ?? "—"}
