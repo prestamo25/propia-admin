@@ -9,14 +9,17 @@ export async function POST(req: Request) {
   if (password && password === process.env.ADMIN_PASSWORD) role = "admin";
   else if (password && password === process.env.DEV_PASSWORD) role = "dev";
 
+  // Relative Location: behind Lambda Web Adapter the request host is the
+  // adapter's local address, so absolute URLs built from req.url are wrong.
   if (!role) {
-    return NextResponse.redirect(new URL("/login?error=1", req.url), {
+    return new NextResponse(null, {
       status: 303,
+      headers: { Location: "/login?error=1" },
     });
   }
 
   const token = await createSessionToken(role, process.env.SESSION_SECRET ?? "");
-  const res = NextResponse.redirect(new URL("/", req.url), { status: 303 });
+  const res = new NextResponse(null, { status: 303, headers: { Location: "/" } });
   res.cookies.set(SESSION_COOKIE, token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
