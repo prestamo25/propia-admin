@@ -6,6 +6,7 @@ import { MobileNav } from "@/components/MobileNav";
 type NavKey =
   | "brokers"
   | "alta"
+  | "envivo"
   | "panorama"
   | "reportes"
   | "whatsapp"
@@ -66,6 +67,7 @@ export async function TopNav({ active }: { active: NavKey }) {
           <nav className="hidden items-center gap-1 rounded-xl bg-neutral-200/40 p-1 md:flex">
             {tab("/", "Brokers", "brokers")}
             {tab("/alta", "Alta", "alta")}
+            {tab("/en-vivo", "En vivo", "envivo")}
             {tab("/panorama", "Panorama", "panorama")}
             {tab("/reportes", "Reportes", "reportes", openReports)}
             {isDev ? (
