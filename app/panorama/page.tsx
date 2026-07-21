@@ -33,7 +33,7 @@ export default async function PanoramaPage() {
     <div className="min-h-screen">
       <TopNav active="panorama" />
 
-      <main className="mx-auto max-w-7xl px-6 py-8">
+      <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8">
         <div className="mb-6">
           <h1 className="text-2xl font-semibold tracking-tight text-neutral-900">Panorama</h1>
           <p className="mt-1 text-sm text-neutral-500">Salud de la red de un vistazo.</p>
@@ -78,7 +78,7 @@ export default async function PanoramaPage() {
 
           {/* Supply vs demand */}
           <Card className="lg:col-span-3">
-            <div className="mb-4 flex items-center justify-between">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
               <h2 className="text-base font-semibold tracking-tight text-neutral-900">
                 Oferta ↔ Demanda por estado
               </h2>
@@ -250,7 +250,7 @@ function SupplyDemand({ rows }: { rows: Panorama["supplyDemand"] }) {
               />
             </div>
             {/* state */}
-            <div className="w-28 shrink-0 truncate text-center text-xs font-medium text-neutral-700">
+            <div className="w-20 shrink-0 truncate text-center text-xs font-medium text-neutral-700 sm:w-28">
               {r.state}
             </div>
             {/* supply — grows right */}

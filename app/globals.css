@@ -24,6 +24,15 @@
     0 20px 44px -18px rgba(16, 24, 40, 0.26);
 }
 
+/* Swipeable strips (mobile nav) — scroll without showing a scrollbar. */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
 body {
   color: var(--foreground);
   background-color: var(--background);

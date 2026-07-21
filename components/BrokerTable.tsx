@@ -113,7 +113,84 @@ export function BrokerTable({ brokers }: { brokers: BrokerRow[] }) {
         </span>
       </div>
 
-      <div className="overflow-x-auto">
+      {/* Phones: stacked cards (the 10-column table can't breathe at 390px). */}
+      <ul className="divide-y divide-neutral-50 md:hidden">
+        {rows.map((b) => {
+          const c = avatarColors(b.name);
+          const s = statusMeta(b.status);
+          const act = relative(b.last_active);
+          return (
+            <li
+              key={b.id}
+              onClick={() => router.push(`/broker/${b.id}`)}
+              className="flex cursor-pointer items-center gap-3 px-4 py-3 transition-colors active:bg-neutral-50"
+            >
+              {b.avatar_url ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={b.avatar_url}
+                  alt=""
+                  className="h-10 w-10 shrink-0 rounded-full object-cover ring-1 ring-black/[0.06]"
+                />
+              ) : (
+                <span
+                  className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-xs font-semibold"
+                  style={{ background: c.bg, color: c.fg }}
+                >
+                  {initials(b.name)}
+                </span>
+              )}
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="truncate font-medium text-neutral-900">
+                    {b.name ?? "—"}
+                  </span>
+                  {b.blocked ? (
+                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-rose-500" />
+                  ) : (
+                    <span
+                      className="h-1.5 w-1.5 shrink-0 rounded-full"
+                      style={{ background: s.dot }}
+                    />
+                  )}
+                </div>
+                <div className="mt-0.5 flex items-center gap-2 text-xs text-neutral-400">
+                  <span className="font-mono">{b.phone ?? "—"}</span>
+                  <span>·</span>
+                  <span className="truncate">{act.label}</span>
+                </div>
+              </div>
+              <span
+                className={`inline-block min-w-7 shrink-0 rounded-md px-2 py-0.5 text-center text-xs font-semibold tabular-nums ${
+                  b.inventory > 0 ? "bg-brand-light text-brand" : "text-neutral-300"
+                }`}
+              >
+                {b.inventory}
+              </span>
+              <svg
+                className="shrink-0 text-neutral-300"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="m9 18 6-6-6-6" />
+              </svg>
+            </li>
+          );
+        })}
+        {rows.length === 0 ? (
+          <li className="px-4 py-16 text-center text-sm text-neutral-400">
+            Sin resultados.
+          </li>
+        ) : null}
+      </ul>
+
+      <div className="hidden overflow-x-auto md:block">
         <table className="w-full border-separate border-spacing-0 text-left text-sm">
           <thead className="sticky top-0 z-10 bg-neutral-50/80 backdrop-blur">
             <tr className="text-xs uppercase tracking-wide text-neutral-500">

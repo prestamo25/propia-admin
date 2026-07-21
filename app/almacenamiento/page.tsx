@@ -34,7 +34,7 @@ export default async function AlmacenamientoPage() {
   return (
     <div className="min-h-screen">
       <TopNav active="almacenamiento" />
-      <main className="mx-auto max-w-4xl px-6 py-8">
+      <main className="mx-auto max-w-4xl px-4 py-6 sm:px-6 sm:py-8">
         <div className="mb-6">
           <h1 className="text-2xl font-semibold tracking-tight text-neutral-900">
             Almacenamiento
@@ -52,6 +52,7 @@ export default async function AlmacenamientoPage() {
         </section>
 
         <div className="overflow-hidden rounded-2xl border border-black/[0.05] bg-white/90 shadow-soft backdrop-blur-sm">
+          <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead className="border-b border-neutral-100 bg-neutral-50 text-xs uppercase tracking-wide text-neutral-500">
               <tr>
@@ -88,7 +89,7 @@ export default async function AlmacenamientoPage() {
                   </td>
                   <td className="px-4 py-3 text-right tabular-nums text-neutral-600">{r.objects}</td>
                   <td className="px-4 py-3">
-                    <div className="h-2 w-40 overflow-hidden rounded-full bg-neutral-100">
+                    <div className="h-2 w-24 overflow-hidden rounded-full bg-neutral-100 sm:w-40">
                       <div
                         className="h-full rounded-full bg-brand"
                         style={{ width: `${(r.bytes / maxBytes) * 100}%` }}
@@ -109,6 +110,7 @@ export default async function AlmacenamientoPage() {
               ) : null}
             </tbody>
           </table>
+          </div>
         </div>
       </main>
     </div>
