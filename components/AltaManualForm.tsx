@@ -41,10 +41,7 @@ export function AltaManualForm() {
   const digits = phone.replace(/\D/g, "");
   const pinDigits = pin.replace(/\D/g, "");
   const valid =
-    firstName.trim() &&
-    lastName.trim() &&
-    digits.length === 10 &&
-    (mode !== "chosen" || pinDigits.length === 6);
+    digits.length === 10 && (mode !== "chosen" || pinDigits.length === 6);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -64,7 +61,7 @@ export function AltaManualForm() {
       return;
     }
     setCreated({
-      name: `${firstName.trim()} ${lastName.trim()}`,
+      name: [firstName.trim(), lastName.trim()].filter(Boolean).join(" "),
       phone10: digits,
       pin: res.pin!,
       temp: mode === "temp",
@@ -100,7 +97,7 @@ export function AltaManualForm() {
             </svg>
           </span>
           <h2 className="text-lg font-semibold text-neutral-900">
-            {created.name} ya tiene acceso
+            {created.name || "El broker"} ya tiene acceso
           </h2>
         </div>
 
@@ -134,8 +131,9 @@ export function AltaManualForm() {
               La app le pedirá{" "}
               <span className="font-semibold text-neutral-900">
                 crear su propio PIN
-              </span>{" "}
-              en ese momento — el código temporal deja de funcionar.
+              </span>
+              {created.name ? "" : " y escribir su nombre"} en ese momento — el
+              código temporal deja de funcionar.
             </li>
           ) : (
             <li>Después puede cambiarlo en Ajustes → Seguridad.</li>
@@ -157,33 +155,7 @@ export function AltaManualForm() {
       onSubmit={handleSubmit}
       className="rounded-2xl border border-black/[0.05] bg-white p-6 shadow-soft"
     >
-      <div className="grid gap-4 sm:grid-cols-2">
-        <label className="block">
-          <span className="mb-1.5 block text-sm font-medium text-neutral-700">
-            Nombre
-          </span>
-          <input
-            value={firstName}
-            onChange={(e) => setFirstName(e.target.value)}
-            placeholder="Ana"
-            autoFocus
-            className="w-full rounded-xl border border-neutral-200 px-3.5 py-2.5 text-[15px] text-neutral-900 outline-none transition placeholder:text-neutral-300 focus:border-[#1c4588] focus:ring-2 focus:ring-[#1c4588]/15"
-          />
-        </label>
-        <label className="block">
-          <span className="mb-1.5 block text-sm font-medium text-neutral-700">
-            Apellido
-          </span>
-          <input
-            value={lastName}
-            onChange={(e) => setLastName(e.target.value)}
-            placeholder="García"
-            className="w-full rounded-xl border border-neutral-200 px-3.5 py-2.5 text-[15px] text-neutral-900 outline-none transition placeholder:text-neutral-300 focus:border-[#1c4588] focus:ring-2 focus:ring-[#1c4588]/15"
-          />
-        </label>
-      </div>
-
-      <label className="mt-4 block">
+      <label className="block">
         <span className="mb-1.5 block text-sm font-medium text-neutral-700">
           Teléfono (10 dígitos)
         </span>
@@ -196,10 +168,34 @@ export function AltaManualForm() {
             onChange={(e) => setPhone(e.target.value)}
             placeholder="222 123 4567"
             inputMode="numeric"
+            autoFocus
             className="w-full rounded-xl border border-neutral-200 px-3.5 py-2.5 text-[15px] tabular-nums text-neutral-900 outline-none transition placeholder:text-neutral-300 focus:border-[#1c4588] focus:ring-2 focus:ring-[#1c4588]/15"
           />
         </div>
       </label>
+
+      <div className="mt-4">
+        <span className="mb-1.5 block text-sm font-medium text-neutral-700">
+          Nombre{" "}
+          <span className="font-normal text-neutral-400">
+            — opcional; si lo dejas vacío, el broker escribe el suyo al entrar
+          </span>
+        </span>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <input
+            value={firstName}
+            onChange={(e) => setFirstName(e.target.value)}
+            placeholder="Nombre"
+            className="w-full rounded-xl border border-neutral-200 px-3.5 py-2.5 text-[15px] text-neutral-900 outline-none transition placeholder:text-neutral-300 focus:border-[#1c4588] focus:ring-2 focus:ring-[#1c4588]/15"
+          />
+          <input
+            value={lastName}
+            onChange={(e) => setLastName(e.target.value)}
+            placeholder="Apellido"
+            className="w-full rounded-xl border border-neutral-200 px-3.5 py-2.5 text-[15px] text-neutral-900 outline-none transition placeholder:text-neutral-300 focus:border-[#1c4588] focus:ring-2 focus:ring-[#1c4588]/15"
+          />
+        </div>
+      </div>
 
       <fieldset className="mt-5">
         <legend className="mb-2 text-sm font-medium text-neutral-700">PIN</legend>

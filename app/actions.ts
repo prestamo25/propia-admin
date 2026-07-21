@@ -84,10 +84,11 @@ export async function createBroker(
   mode: PinMode = "temp",
   chosenPin?: string,
 ): Promise<AltaResult> {
+  // Names are optional: an empty name routes the broker through onboarding
+  // after the (forced) PIN step, so they type their own.
   const first = firstName.trim();
   const last = lastName.trim();
   const digits = phone10.replace(/\D/g, "");
-  if (!first || !last) return { error: "Falta el nombre o el apellido." };
   if (digits.length !== 10)
     return { error: "El teléfono debe tener 10 dígitos." };
   if (mode === "chosen") {
@@ -110,7 +111,7 @@ export async function createBroker(
     .maybeSingle();
   if (existing)
     return {
-      error: `Este número ya está registrado (${existing.name}). Puede entrar con su PIN o recuperarlo por SMS.`,
+      error: `Este número ya está registrado${existing.name ? ` (${existing.name})` : ""}. Puede entrar con su PIN o recuperarlo por SMS.`,
     };
 
   const pin =
@@ -132,7 +133,7 @@ export async function createBroker(
     phone,
     first_name: first,
     last_name: last,
-    name: `${first} ${last}`,
+    name: [first, last].filter(Boolean).join(" "),
     states: [],
     pin_set: true,
     must_change_pin: mode === "temp",

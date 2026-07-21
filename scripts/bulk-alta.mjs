@@ -47,15 +47,17 @@ for (const line of lines) {
     .replace(/[\d()+\-.,;·|]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
-  if (!m || !name) {
+  if (!m) {
     bad.push(line);
     continue;
   }
-  const [first, ...rest] = name.split(" ");
+  // Name optional: without one the broker fills onboarding after the forced
+  // PIN change.
+  const [first = "", ...rest] = name ? name.split(" ") : [];
   guests.push({
     phone: `52${m[1]}`,
     first,
-    last: rest.join(" ") || first,
+    last: rest.join(" "),
     name,
   });
 }
@@ -68,7 +70,7 @@ console.log(`Líneas: ${lines.length} · válidas: ${unique.length} · duplicada
 bad.forEach((l) => console.log(`  ✗ ilegible: ${l}`));
 
 if (!apply) {
-  unique.forEach((g) => console.log(`  ✓ ${g.name} — ${g.phone}`));
+  unique.forEach((g) => console.log(`  ✓ ${g.name || "(sin nombre — onboarding)"} — ${g.phone}`));
   console.log("\nDry-run. Agrega --apply para crear las cuentas.");
   process.exit(0);
 }
@@ -79,7 +81,7 @@ for (const g of unique) {
   const { data: prev } = await sb.from("users").select("id").eq("phone", g.phone).maybeSingle();
   if (prev) {
     existing++;
-    console.log(`  = ya existe: ${g.name} (${g.phone})`);
+    console.log(`  = ya existe: ${g.name || g.phone}`);
     continue;
   }
   const { data: createdUser, error: authErr } = await sb.auth.admin.createUser({
@@ -109,7 +111,7 @@ for (const g of unique) {
     continue;
   }
   created++;
-  console.log(`  ✓ creada: ${g.name} (${g.phone})`);
+  console.log(`  ✓ creada: ${g.name || "(sin nombre)"} (${g.phone})`);
 }
 
 console.log(`\nCreadas: ${created} · ya existían: ${existing} · fallidas: ${failed}`);
