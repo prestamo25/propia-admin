@@ -55,6 +55,13 @@ export async function setReportStatus(
 
 type AltaResult = { pin?: string; error?: string };
 
+// "temp" issues the shared default 123456 with users.must_change_pin=true —
+// the app forces the broker to replace it on their FIRST login (create-pin
+// hides "más tarde"), so the shared code dies the moment they enter.
+export type PinMode = "temp" | "chosen" | "random";
+
+const TEMP_PIN = "123456";
+
 // Same weak-PIN rules as the app (src/lib/auth.ts): repeated digit or a
 // straight ascending/descending run.
 function isWeakPin(pin: string): boolean {
@@ -74,6 +81,7 @@ export async function createBroker(
   firstName: string,
   lastName: string,
   phone10: string,
+  mode: PinMode = "temp",
   chosenPin?: string,
 ): Promise<AltaResult> {
   const first = firstName.trim();
@@ -82,8 +90,8 @@ export async function createBroker(
   if (!first || !last) return { error: "Falta el nombre o el apellido." };
   if (digits.length !== 10)
     return { error: "El teléfono debe tener 10 dígitos." };
-  if (chosenPin) {
-    if (!/^\d{6}$/.test(chosenPin))
+  if (mode === "chosen") {
+    if (!chosenPin || !/^\d{6}$/.test(chosenPin))
       return { error: "El PIN debe tener exactamente 6 dígitos." };
     if (isWeakPin(chosenPin))
       return {
@@ -105,7 +113,8 @@ export async function createBroker(
       error: `Este número ya está registrado (${existing.name}). Puede entrar con su PIN o recuperarlo por SMS.`,
     };
 
-  const pin = chosenPin || generatePin();
+  const pin =
+    mode === "temp" ? TEMP_PIN : mode === "chosen" ? chosenPin! : generatePin();
   const { data: created, error: authErr } = await sb.auth.admin.createUser({
     phone,
     phone_confirm: true,
@@ -126,6 +135,7 @@ export async function createBroker(
     name: `${first} ${last}`,
     states: [],
     pin_set: true,
+    must_change_pin: mode === "temp",
   });
   if (profileErr) {
     // Don't leave a half-created account: without the profile row the app
