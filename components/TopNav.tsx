@@ -66,7 +66,7 @@ export async function TopNav({ active }: { active: NavKey }) {
           </div>
           <nav className="hidden items-center gap-1 rounded-xl bg-neutral-200/40 p-1 md:flex">
             {tab("/", "Brokers", "brokers")}
-            {tab("/alta", "Alta", "alta")}
+            {tab("/alta", "SMS", "alta")}
             {tab("/en-vivo", "En vivo", "envivo")}
             {tab("/panorama", "Panorama", "panorama")}
             {tab("/reportes", "Reportes", "reportes", openReports)}

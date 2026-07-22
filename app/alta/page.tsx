@@ -1,5 +1,5 @@
 import { TopNav } from "@/components/TopNav";
-import { AltaManualForm } from "@/components/AltaManualForm";
+import { RescueOtpCard } from "@/components/RescueOtpCard";
 
 export const dynamic = "force-dynamic";
 
@@ -11,20 +11,20 @@ export default function AltaPage() {
       <main className="mx-auto max-w-2xl px-4 py-6 sm:px-6 sm:py-8">
         <div className="mb-6">
           <h1 className="text-2xl font-semibold tracking-tight text-neutral-900">
-            Alta manual
+            ¿No le llega el código?
           </h1>
           <p className="mt-1 text-sm text-neutral-500">
-            Crea acceso inmediato con PIN temporal — sin SMS. Úsalo cuando el
-            código no llegue o para registrar brokers en persona.
+            Activa el rescate para su número: el broker pide el código otra vez
+            en la app y escribe{" "}
+            <span className="font-mono font-semibold text-neutral-700">
+              123456
+            </span>
+            . Se registra o entra igual que siempre — solo que sin esperar el
+            SMS.
           </p>
         </div>
 
-        <AltaManualForm />
-
-        <p className="mt-4 text-xs text-neutral-400">
-          El alta confirma el teléfono sin verificarlo por SMS: úsala solo con
-          brokers cuya identidad conozcas.
-        </p>
+        <RescueOtpCard />
       </main>
     </div>
   );

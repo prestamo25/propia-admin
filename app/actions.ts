@@ -1,8 +1,13 @@
 "use server";
 
-import { randomInt } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import {
+  CANONICAL_PAIRS,
+  RESCUE_OTP,
+  getOtpConfig,
+  saveOtpConfig,
+} from "@/lib/testOtp";
 
 // ~100 years — an effectively permanent ban until explicitly lifted.
 const BAN_DURATION = "876600h";
@@ -47,104 +52,93 @@ export async function setReportStatus(
   return {};
 }
 
-// --- Alta manual -----------------------------------------------------------
-// Pre-provisions a broker with a confirmed phone and a temporary PIN, skipping
-// SMS entirely. The app's phone screen routes any account with pin_set=true
-// straight to PIN login, so the broker signs in with phone + this PIN and can
-// change it later in Ajustes → Seguridad.
+// --- SMS de rescate ---------------------------------------------------------
+// When Twilio won't deliver the code: register the phone as a Supabase
+// test-OTP pair so the app's normal code screen accepts 123456 (no SMS is sent
+// for test numbers). Signup/login proceeds exactly as always — this only
+// replaces the SMS. Remove the pair once the broker is in: while it's active,
+// anyone entering that phone can log in with 123456.
 
-type AltaResult = { pin?: string; error?: string };
+export type RescuePair = { phone10: string; name: string | null };
 
-// "temp" issues the shared default 123456 with users.must_change_pin=true —
-// the app forces the broker to replace it on their FIRST login (create-pin
-// hides "más tarde"), so the shared code dies the moment they enter.
-export type PinMode = "temp" | "chosen" | "random";
-
-const TEMP_PIN = "123456";
-
-// Same weak-PIN rules as the app (src/lib/auth.ts): repeated digit or a
-// straight ascending/descending run.
-function isWeakPin(pin: string): boolean {
-  if (/^(\d)\1+$/.test(pin)) return true;
-  return "0123456789".includes(pin) || "9876543210".includes(pin);
+export async function listRescuePairs(): Promise<{
+  pairs?: RescuePair[];
+  error?: string;
+}> {
+  try {
+    const cfg = await getOtpConfig();
+    const phones = [...cfg.pairs.keys()].filter((p) => !CANONICAL_PAIRS.has(p));
+    const names = new Map<string, string>();
+    if (phones.length) {
+      const sb = supabaseAdmin();
+      const { data } = await sb
+        .from("users")
+        .select("phone, name, first_name, last_name")
+        .in("phone", phones);
+      for (const u of data ?? []) {
+        const row = u as {
+          phone: string;
+          name: string | null;
+          first_name: string | null;
+          last_name: string | null;
+        };
+        const full =
+          [row.first_name, row.last_name].filter(Boolean).join(" ").trim() ||
+          row.name;
+        if (full) names.set(row.phone, full);
+      }
+    }
+    return {
+      pairs: phones.map((p) => ({
+        phone10: p.slice(2),
+        name: names.get(p) ?? null,
+      })),
+    };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : String(e) };
+  }
 }
 
-function generatePin(): string {
-  let pin: string;
-  do {
-    pin = String(randomInt(0, 1_000_000)).padStart(6, "0");
-  } while (isWeakPin(pin));
-  return pin;
-}
-
-export async function createBroker(
-  firstName: string,
-  lastName: string,
+export async function addRescuePair(
   phone10: string,
-  mode: PinMode = "temp",
-  chosenPin?: string,
-): Promise<AltaResult> {
-  // Names are optional: an empty name routes the broker through onboarding
-  // after the (forced) PIN step, so they type their own.
-  const first = firstName.trim();
-  const last = lastName.trim();
+): Promise<{ error?: string; already?: boolean }> {
   const digits = phone10.replace(/\D/g, "");
   if (digits.length !== 10)
     return { error: "El teléfono debe tener 10 dígitos." };
-  if (mode === "chosen") {
-    if (!chosenPin || !/^\d{6}$/.test(chosenPin))
-      return { error: "El PIN debe tener exactamente 6 dígitos." };
-    if (isWeakPin(chosenPin))
+  const phone = `52${digits}`;
+  try {
+    const cfg = await getOtpConfig();
+    if (cfg.pairs.get(phone) === RESCUE_OTP) return { already: true };
+    cfg.pairs.set(phone, RESCUE_OTP);
+    await saveOtpConfig(cfg);
+    // The auth server reloads its config asynchronously (a code request that
+    // races the reload still fires a real SMS), so hold the action a few
+    // seconds and confirm the write before reporting success.
+    await new Promise((r) => setTimeout(r, 6000));
+    const after = await getOtpConfig();
+    if (after.pairs.get(phone) !== RESCUE_OTP)
       return {
         error:
-          "Ese PIN es demasiado fácil de adivinar (dígitos repetidos o en orden). Elige otro.",
+          "El cambio no se guardó (otro cambio lo pisó). Inténtalo de nuevo.",
       };
+    return {};
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : String(e) };
   }
+}
 
-  const phone = `52${digits}`; // users.phone format: 52 + 10 digits, no "+"
-  const sb = supabaseAdmin();
-
-  const { data: existing } = await sb
-    .from("users")
-    .select("id, name")
-    .eq("phone", phone)
-    .maybeSingle();
-  if (existing)
-    return {
-      error: `Este número ya está registrado${existing.name ? ` (${existing.name})` : ""}. Puede entrar con su PIN o recuperarlo por SMS.`,
-    };
-
-  const pin =
-    mode === "temp" ? TEMP_PIN : mode === "chosen" ? chosenPin! : generatePin();
-  const { data: created, error: authErr } = await sb.auth.admin.createUser({
-    phone,
-    phone_confirm: true,
-    password: pin,
-  });
-  if (authErr) {
-    const msg = /already|exists|registered/i.test(authErr.message)
-      ? "Este número ya tiene una cuenta. Puede entrar con su PIN o recuperarlo por SMS."
-      : authErr.message;
-    return { error: msg };
+export async function removeRescuePair(phone10: string): Promise<Result> {
+  const digits = phone10.replace(/\D/g, "");
+  const phone = `52${digits}`;
+  if (CANONICAL_PAIRS.has(phone))
+    return { error: "Ese número es una cuenta de prueba fija." };
+  try {
+    const cfg = await getOtpConfig();
+    if (!cfg.pairs.has(phone)) return {};
+    cfg.pairs.delete(phone);
+    await saveOtpConfig(cfg);
+    return {};
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : String(e) };
   }
-
-  const { error: profileErr } = await sb.from("users").insert({
-    id: created.user.id,
-    phone,
-    first_name: first,
-    last_name: last,
-    name: [first, last].filter(Boolean).join(" "),
-    states: [],
-    pin_set: true,
-    must_change_pin: mode === "temp",
-  });
-  if (profileErr) {
-    // Don't leave a half-created account: without the profile row the app
-    // would route this phone to SMS OTP, which is exactly what we're avoiding.
-    await sb.auth.admin.deleteUser(created.user.id);
-    return { error: `No se pudo crear el perfil: ${profileErr.message}` };
-  }
-
-  revalidatePath("/");
-  return { pin };
 }

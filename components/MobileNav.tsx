@@ -87,7 +87,7 @@ export function MobileNav({
     },
     {
       href: "/alta",
-      label: "Alta manual",
+      label: "SMS",
       key: "alta",
       icon: (
         <svg {...STROKE}>
