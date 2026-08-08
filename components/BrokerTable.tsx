@@ -5,24 +5,31 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { BrokerRow } from "@/lib/data";
 import { BlockButton } from "@/components/BlockButton";
-import { avatarColors, fmtDate, initials, relative } from "@/lib/format";
+import { filterBrokers } from "@/lib/brokerFilter";
+import {
+  STATUS_LABEL,
+  avatarColors,
+  fmtDate,
+  initials,
+  relative,
+} from "@/lib/format";
 
 type SortKey = "name" | "inventory" | "created_at" | "last_active";
 type SortDir = "asc" | "desc";
 
 const STATUS: Record<string, { label: string; dot: string; cls: string }> = {
   approved: {
-    label: "Aprobado",
+    label: STATUS_LABEL.approved,
     dot: "#10b981",
     cls: "bg-emerald-50 text-emerald-700 ring-emerald-200",
   },
   pending: {
-    label: "Pendiente",
+    label: STATUS_LABEL.pending,
     dot: "#f59e0b",
     cls: "bg-amber-50 text-amber-700 ring-amber-200",
   },
   rejected: {
-    label: "Rechazado",
+    label: STATUS_LABEL.rejected,
     dot: "#ef4444",
     cls: "bg-rose-50 text-rose-700 ring-rose-200",
   },
@@ -45,16 +52,7 @@ export function BrokerTable({ brokers }: { brokers: BrokerRow[] }) {
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
   const rows = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    const filtered = q
-      ? brokers.filter((b) =>
-          [b.name, b.company, b.phone, b.states.join(" ")]
-            .filter(Boolean)
-            .join(" ")
-            .toLowerCase()
-            .includes(q),
-        )
-      : brokers;
+    const filtered = filterBrokers(brokers, query);
 
     const dir = sortDir === "asc" ? 1 : -1;
     return [...filtered].sort((a, b) => {
@@ -108,9 +106,12 @@ export function BrokerTable({ brokers }: { brokers: BrokerRow[] }) {
             className="w-full rounded-lg border border-neutral-200 bg-neutral-50/60 py-2 pl-9 pr-3 text-sm text-neutral-900 outline-none transition focus:border-brand focus:bg-white focus:ring-4 focus:ring-brand/10"
           />
         </div>
-        <span className="shrink-0 text-sm tabular-nums text-neutral-400">
-          {rows.length} {rows.length === 1 ? "broker" : "brokers"}
-        </span>
+        <div className="flex shrink-0 items-center gap-3">
+          <span className="hidden text-sm tabular-nums text-neutral-400 sm:inline">
+            {rows.length} {rows.length === 1 ? "broker" : "brokers"}
+          </span>
+          <ExcelButton query={query} count={rows.length} />
+        </div>
       </div>
 
       {/* Phones: stacked cards (the 10-column table can't breathe at 390px). */}
@@ -354,6 +355,108 @@ export function BrokerTable({ brokers }: { brokers: BrokerRow[] }) {
         </table>
       </div>
     </div>
+  );
+}
+
+// Downloads the list as .xlsx — Pablo's contact sheet for campaigns. Fetched
+// rather than linked so the wait is visible: building the file takes a second,
+// and a link that looks inert for that long reads as broken.
+function ExcelButton({ query, count }: { query: string; count: number }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const q = query.trim();
+
+  async function download() {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(
+        `/api/export/brokers${q ? `?q=${encodeURIComponent(q)}` : ""}`,
+      );
+      // An expired session doesn't 401 — the proxy redirects to /login and we
+      // get a 200 full of HTML, so trust the content type, not res.ok.
+      const type = res.headers.get("content-type") ?? "";
+      if (!res.ok) throw new Error(`El servidor respondió ${res.status}.`);
+      if (!type.includes("spreadsheetml")) {
+        throw new Error("Tu sesión expiró. Vuelve a entrar.");
+      }
+
+      const name =
+        /filename="([^"]+)"/.exec(
+          res.headers.get("content-disposition") ?? "",
+        )?.[1] ?? "brokers-propia.xlsx";
+      const url = URL.createObjectURL(await res.blob());
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = name;
+      a.click();
+      // Safari needs the blob to outlive the click.
+      setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    } catch (e) {
+      setError(
+        e instanceof Error ? e.message : "No se pudo generar el archivo.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <>
+      {error ? (
+        <span
+          title={error}
+          className="max-w-40 truncate text-xs font-medium text-rose-600"
+        >
+          {error}
+        </span>
+      ) : null}
+      <button
+        onClick={download}
+        disabled={busy || count === 0}
+        title={
+          q
+            ? `Descargar los ${count} brokers de esta búsqueda`
+            : "Descargar todos los brokers (nombre, teléfono, email)"
+        }
+        className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-brand ring-1 ring-inset ring-brand/20 transition hover:bg-brand-light disabled:opacity-40"
+      >
+        {busy ? (
+          <svg
+            className="animate-spin"
+            width="15"
+            height="15"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+          >
+            <path d="M21 12a9 9 0 1 1-6.2-8.6" />
+          </svg>
+        ) : (
+          <svg
+            width="15"
+            height="15"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M12 3v12" />
+            <path d="m7 11 5 5 5-5" />
+            <path d="M5 21h14" />
+          </svg>
+        )}
+        {busy ? "Generando…" : "Excel"}
+        {q && count > 0 ? (
+          <span className="tabular-nums opacity-60">({count})</span>
+        ) : null}
+      </button>
+    </>
   );
 }
 

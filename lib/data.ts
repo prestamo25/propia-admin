@@ -5,11 +5,15 @@ export type BrokerRow = {
   name: string | null;
   company: string | null;
   phone: string | null;
+  email: string | null;
   states: string[];
   status: string | null;
   created_at: string | null;
   last_active: string | null;
   avatar_url: string | null;
+  // Opt-in to receive WhatsApp messages from us (Ajustes → notificaciones).
+  // Carried here so the Excel export can mark who is reachable that way.
+  whatsapp_opt_in: boolean;
   inventory: number;
   // MB used (R2 storage) — not yet wired; photos live in Cloudflare R2, not
   // Postgres, so this needs a separate R2-prefix sum. null = "—" for now.
@@ -43,7 +47,7 @@ export async function fetchOverview(): Promise<Overview> {
     sb
       .from("users")
       .select(
-        "id, name, first_name, last_name, company, phone, states, status, created_at, last_active, avatar_url",
+        "id, name, first_name, last_name, company, phone, email, states, status, created_at, last_active, avatar_url, whatsapp_opt_in",
       )
       .order("created_at", { ascending: false }),
     sb.from("properties").select("user_id"),
@@ -75,11 +79,13 @@ export async function fetchOverview(): Promise<Overview> {
       last_name: string | null;
       company: string | null;
       phone: string | null;
+      email: string | null;
       states: string[] | null;
       status: string | null;
       created_at: string | null;
       last_active: string | null;
       avatar_url: string | null;
+      whatsapp_opt_in: boolean | null;
     };
     const full =
       [row.first_name, row.last_name].filter(Boolean).join(" ").trim() ||
@@ -90,11 +96,13 @@ export async function fetchOverview(): Promise<Overview> {
       name: full,
       company: row.company,
       phone: row.phone,
+      email: row.email,
       states: row.states ?? [],
       status: row.status,
       created_at: row.created_at,
       last_active: row.last_active,
       avatar_url: row.avatar_url,
+      whatsapp_opt_in: Boolean(row.whatsapp_opt_in),
       inventory: counts.get(row.id) ?? 0,
       mb_used: null,
       blocked: banned.get(row.id) ?? false,

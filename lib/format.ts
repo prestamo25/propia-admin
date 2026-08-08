@@ -24,6 +24,20 @@ export function relative(iso: string | null): { label: string; fresh: boolean } 
   return { label: fmtDate(iso), fresh: false };
 }
 
+// users.status, in Spanish. Shared so the table and the Excel export can never
+// drift apart on what a broker's state is called.
+export const STATUS_LABEL: Record<string, string> = {
+  approved: "Aprobado",
+  pending: "Pendiente",
+  rejected: "Rechazado",
+};
+
+// A block is an auth-level ban and outranks whatever users.status says.
+export function statusLabel(status: string | null, blocked = false): string {
+  if (blocked) return "Bloqueado";
+  return STATUS_LABEL[status ?? ""] ?? status ?? "—";
+}
+
 export function initials(name: string | null): string {
   if (!name) return "—";
   const parts = name.trim().split(/\s+/).filter(Boolean);
