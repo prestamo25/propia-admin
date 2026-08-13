@@ -9,6 +9,7 @@ type NavKey =
   | "envivo"
   | "panorama"
   | "reportes"
+  | "salidas"
   | "whatsapp"
   | "almacenamiento"
   | "lifecycle";
@@ -70,6 +71,7 @@ export async function TopNav({ active }: { active: NavKey }) {
             {tab("/en-vivo", "En vivo", "envivo")}
             {tab("/panorama", "Panorama", "panorama")}
             {tab("/reportes", "Reportes", "reportes", openReports)}
+            {tab("/salidas", "Salidas", "salidas")}
             {isDev ? (
               <>
                 <span className="mx-1 h-4 w-px bg-neutral-300/70" />

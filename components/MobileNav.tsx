@@ -12,6 +12,7 @@ type NavKey =
   | "envivo"
   | "panorama"
   | "reportes"
+  | "salidas"
   | "whatsapp"
   | "almacenamiento"
   | "lifecycle";
@@ -133,6 +134,18 @@ export function MobileNav({
         <svg {...STROKE}>
           <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
           <line x1="4" x2="4" y1="22" y2="15" />
+        </svg>
+      ),
+    },
+    {
+      href: "/salidas",
+      label: "Salidas",
+      key: "salidas",
+      icon: (
+        <svg {...STROKE}>
+          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+          <polyline points="16 17 21 12 16 7" />
+          <line x1="21" x2="9" y1="12" y2="12" />
         </svg>
       ),
     },
