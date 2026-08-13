@@ -55,8 +55,8 @@ export default async function SalidasPage() {
         <div className="mb-6">
           <h1 className="text-2xl font-semibold tracking-tight text-neutral-900">Salidas</h1>
           <p className="mt-1 text-sm text-neutral-500">
-            Por qué se eliminan los requerimientos — cada baja responde una encuesta antes de
-            borrarse. «Por conexión de Propia» es el marcador de la red.
+            Por qué se eliminan los requerimientos y propiedades — cada baja responde una
+            encuesta antes de borrarse. «Por conexión de Propia» es el marcador de la red.
           </p>
         </div>
 

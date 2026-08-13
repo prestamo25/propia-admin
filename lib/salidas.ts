@@ -95,7 +95,14 @@ function summarize(kind: SalidaRow["kind"], s: Snapshot): string {
   if (types.length) parts.push(types.join(" / "));
   if (s.states?.length) parts.push(s.states.join(", "));
   if (s.price_max != null) {
-    parts.push(s.price_min != null && s.price_min > 0 && s.price_min !== s.price_max ? `${short(s.price_min)} – ${short(s.price_max)}` : `Hasta ${short(s.price_max)}`);
+    // A property's snapshot carries its fixed price; a request's is a budget.
+    parts.push(
+      kind === "property"
+        ? short(s.price_max)
+        : s.price_min != null && s.price_min > 0 && s.price_min !== s.price_max
+          ? `${short(s.price_min)} – ${short(s.price_max)}`
+          : `Hasta ${short(s.price_max)}`,
+    );
   }
   return parts.join(" · ") || "—";
 }
