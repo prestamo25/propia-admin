@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { pageAll } from "@/lib/pageAll";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 export const dynamic = "force-dynamic";
@@ -18,16 +19,27 @@ type FeedRow = {
 
 export async function GET() {
   const sb = supabaseAdmin();
-  const { data, error } = await sb
-    .from("users")
-    .select("id, name, phone, created_at, status, must_change_pin")
-    .order("created_at", { ascending: false })
-    .limit(1000);
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  // Paged: the en-vivo totals must see EVERY broker — PostgREST caps a single
+  // response at 1,000 rows and .limit() can't exceed it.
+  type DbUser = {
+    id: string;
+    name: string | null;
+    phone: string | null;
+    created_at: string | null;
+    status: string | null;
+    must_change_pin: boolean | null;
+  };
+  let rows: DbUser[];
+  try {
+    rows = await pageAll<DbUser>(() =>
+      sb
+        .from("users")
+        .select("id, name, phone, created_at, status, must_change_pin")
+        .order("created_at", { ascending: false }),
+    );
+  } catch (e) {
+    return NextResponse.json({ error: (e as Error).message }, { status: 500 });
   }
-
-  const rows = data ?? [];
   const now = Date.now();
   // Event-local day boundary (Puebla). Mexico dropped DST — fixed UTC-6.
   const cdmxDay = new Intl.DateTimeFormat("en-CA", {

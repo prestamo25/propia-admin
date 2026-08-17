@@ -1,3 +1,4 @@
+import { pageAll } from "@/lib/pageAll";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 export type BrokerRow = {
@@ -43,35 +44,43 @@ function isBanned(bannedUntil: string | null | undefined): boolean {
 export async function fetchOverview(): Promise<Overview> {
   const sb = supabaseAdmin();
 
-  const [usersRes, propsRes, authRes] = await Promise.all([
-    sb
-      .from("users")
-      .select(
-        "id, name, first_name, last_name, company, phone, email, states, status, created_at, last_active, avatar_url, whatsapp_opt_in",
-      )
-      .order("created_at", { ascending: false }),
-    sb.from("properties").select("user_id"),
-    // Ban state lives in the auth schema, reachable only via the admin API.
-    // perPage covers near-term scale; paginate when the network grows past this.
-    sb.auth.admin.listUsers({ page: 1, perPage: 1000 }),
+  // Every list here is a FULL-table read → paged (pageAll), or PostgREST's
+  // 1,000-row cap silently truncates: the overview froze at "1000 Propiedades"
+  // and per-broker inventory counts went quietly wrong (2026-08-17).
+  const [userRows, propRows, authUsers] = await Promise.all([
+    pageAll<Record<string, unknown>>(() =>
+      sb
+        .from("users")
+        .select(
+          "id, name, first_name, last_name, company, phone, email, states, status, created_at, last_active, avatar_url, whatsapp_opt_in",
+        )
+        .order("created_at", { ascending: false }),
+    ),
+    pageAll<{ user_id: string }>(() => sb.from("properties").select("user_id")),
+    // Ban state lives in the auth schema, reachable only via the admin API —
+    // its own pagination (page/perPage), same silent-truncation rule.
+    (async () => {
+      const users: { id: string; banned_until?: string | null }[] = [];
+      for (let page = 1; ; page++) {
+        const res = await sb.auth.admin.listUsers({ page, perPage: 1000 });
+        if (res.error) throw res.error;
+        users.push(...(res.data.users as typeof users));
+        if (res.data.users.length < 1000) return users;
+      }
+    })(),
   ]);
 
-  if (usersRes.error) throw usersRes.error;
-  if (propsRes.error) throw propsRes.error;
-  if (authRes.error) throw authRes.error;
-
   const counts = new Map<string, number>();
-  for (const p of propsRes.data ?? []) {
-    const uid = (p as { user_id: string }).user_id;
-    counts.set(uid, (counts.get(uid) ?? 0) + 1);
+  for (const p of propRows) {
+    counts.set(p.user_id, (counts.get(p.user_id) ?? 0) + 1);
   }
 
   const banned = new Map<string, boolean>();
-  for (const u of authRes.data.users) {
+  for (const u of authUsers) {
     banned.set(u.id, isBanned(u.banned_until));
   }
 
-  const brokers: BrokerRow[] = (usersRes.data ?? []).map((u) => {
+  const brokers: BrokerRow[] = userRows.map((u) => {
     const row = u as {
       id: string;
       name: string | null;
@@ -119,7 +128,7 @@ export async function fetchOverview(): Promise<Overview> {
       brokers: brokers.length,
       approved,
       pending,
-      properties: propsRes.data?.length ?? 0,
+      properties: propRows.length,
       blocked,
     },
   };
@@ -158,7 +167,7 @@ export type BrokerDetail = {
 export async function fetchBroker(id: string): Promise<BrokerDetail | null> {
   const sb = supabaseAdmin();
 
-  const [userRes, authRes, propsRes] = await Promise.all([
+  const [userRes, authRes, propRows] = await Promise.all([
     sb
       .from("users")
       .select(
@@ -167,17 +176,18 @@ export async function fetchBroker(id: string): Promise<BrokerDetail | null> {
       .eq("id", id)
       .maybeSingle(),
     sb.auth.admin.getUserById(id),
-    sb
-      .from("properties")
-      .select(
-        "id, name, type, transaction, price, currency, state, bedrooms, bathrooms, address, source, created_at, property_photos(thumb_url, position)",
-      )
-      .eq("user_id", id)
-      .order("created_at", { ascending: false }),
+    pageAll<Record<string, unknown>>(() =>
+      sb
+        .from("properties")
+        .select(
+          "id, name, type, transaction, price, currency, state, bedrooms, bathrooms, address, source, created_at, property_photos(thumb_url, position)",
+        )
+        .eq("user_id", id)
+        .order("created_at", { ascending: false }),
+    ),
   ]);
 
   if (userRes.error) throw userRes.error;
-  if (propsRes.error) throw propsRes.error;
   if (!userRes.data) return null;
 
   const u = userRes.data as {
@@ -197,7 +207,7 @@ export async function fetchBroker(id: string): Promise<BrokerDetail | null> {
   const full =
     [u.first_name, u.last_name].filter(Boolean).join(" ").trim() || u.name || null;
 
-  const listings: Listing[] = (propsRes.data ?? []).map((row) => {
+  const listings: Listing[] = propRows.map((row) => {
     const p = row as {
       id: string;
       name: string | null;

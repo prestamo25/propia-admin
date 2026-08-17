@@ -1,3 +1,4 @@
+import { pageAll } from "@/lib/pageAll";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 // Windows mirror the lifecycle-sweep Edge Function.
@@ -28,12 +29,15 @@ const DAY = 86400000;
 export async function fetchLifecycle(): Promise<LifecycleData> {
   const sb = supabaseAdmin();
 
-  const { data, error } = await sb
-    .from("properties")
-    .select("id, name, user_id, lifecycle, renewed_at, archived_at");
-  if (error) throw error;
+  // Paged: properties passed 1,000 rows (PostgREST's per-response cap) —
+  // an unpaged read here undercounts every lifecycle bucket.
+  const data = await pageAll<Record<string, unknown>>(() =>
+    sb
+      .from("properties")
+      .select("id, name, user_id, lifecycle, renewed_at, archived_at"),
+  );
 
-  const rows = (data ?? []) as {
+  const rows = data as {
     id: string;
     name: string | null;
     user_id: string;

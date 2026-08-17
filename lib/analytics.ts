@@ -1,3 +1,4 @@
+import { pageAll } from "@/lib/pageAll";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 export type WeekPoint = {
@@ -43,23 +44,29 @@ function startOfWeek(d: Date): Date {
 export async function fetchPanorama(): Promise<Panorama> {
   const sb = supabaseAdmin();
 
-  const [usersRes, propsRes, reqsRes, offersRes, notifsRes] = await Promise.all([
-    sb.from("users").select("created_at, last_active"),
-    sb.from("properties").select("created_at, state"),
-    sb.from("search_requests").select("created_at, states"),
+  // Full-table reads are paged (pageAll) — PostgREST's 1,000-row cap was
+  // silently truncating properties (and would soon truncate users), skewing
+  // every chart below. Notifications only feed the matches KPI, so that one
+  // is a server-side count instead of hauling the whole table over.
+  const [users, props, reqs, offersRes, matchNotifsRes] = await Promise.all([
+    pageAll<{ created_at: string | null; last_active: string | null }>(() =>
+      sb.from("users").select("created_at, last_active"),
+    ),
+    pageAll<{ created_at: string | null; state: string | null }>(() =>
+      sb.from("properties").select("created_at, state"),
+    ),
+    pageAll<{ created_at: string | null; states: string[] | null }>(() =>
+      sb.from("search_requests").select("created_at, states"),
+    ),
     sb.from("request_interests").select("*", { count: "exact", head: true }),
-    sb.from("notifications").select("type"),
+    sb
+      .from("notifications")
+      .select("*", { count: "exact", head: true })
+      .in("type", ["request_match", "inventory_match"]),
   ]);
 
-  if (usersRes.error) throw usersRes.error;
-  if (propsRes.error) throw propsRes.error;
-  if (reqsRes.error) throw reqsRes.error;
   if (offersRes.error) throw offersRes.error;
-  if (notifsRes.error) throw notifsRes.error;
-
-  const users = usersRes.data ?? [];
-  const props = propsRes.data ?? [];
-  const reqs = reqsRes.data ?? [];
+  if (matchNotifsRes.error) throw matchNotifsRes.error;
 
   // ── growth: last 8 weeks ──────────────────────────────────────────────────
   const WEEKS = 8;
@@ -122,10 +129,7 @@ export async function fetchPanorama(): Promise<Panorama> {
     .sort((a, b) => b.supply + b.demand - (a.supply + a.demand));
 
   // ── matches ───────────────────────────────────────────────────────────────
-  let matches = 0;
-  for (const n of notifsRes.data ?? []) {
-    if (n.type === "request_match" || n.type === "inventory_match") matches++;
-  }
+  const matches = matchNotifsRes.count ?? 0;
 
   return {
     kpis: {

@@ -1,3 +1,4 @@
+import { pageAll } from "@/lib/pageAll";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 // WhatsApp group → state/region. As you spin up one group per state, add a line
@@ -56,25 +57,28 @@ export type BotMonitor = {
 export async function fetchBotMonitor(): Promise<BotMonitor> {
   const sb = supabaseAdmin();
 
-  const [waRes, promoRes] = await Promise.all([
-    sb
-      .from("wa_listings")
-      .select(
-        "id, captured_at, group_jid, group_name, sender_name, contact_phone, kind, review_status, images, extracted, body",
-      )
-      .order("captured_at", { ascending: false }),
-    sb.from("properties").select("wa_listing_id").eq("source", "whatsapp"),
+  // Paged (pageAll): wa_listings holds ~1–2k rows inside its 7-day retention
+  // window, past PostgREST's 1,000-row cap — an unpaged read silently drops
+  // the tail of the feed.
+  const [waRows, promoRows] = await Promise.all([
+    pageAll<Record<string, unknown>>(() =>
+      sb
+        .from("wa_listings")
+        .select(
+          "id, captured_at, group_jid, group_name, sender_name, contact_phone, kind, review_status, images, extracted, body",
+        )
+        .order("captured_at", { ascending: false }),
+    ),
+    pageAll<{ wa_listing_id: string | null }>(() =>
+      sb.from("properties").select("wa_listing_id").eq("source", "whatsapp"),
+    ),
   ]);
-  if (waRes.error) throw waRes.error;
-  if (promoRes.error) throw promoRes.error;
 
   const promoted = new Set(
-    (promoRes.data ?? [])
-      .map((p) => (p as { wa_listing_id: string | null }).wa_listing_id)
-      .filter(Boolean) as string[],
+    promoRows.map((p) => p.wa_listing_id).filter(Boolean) as string[],
   );
 
-  const captures: Capture[] = (waRes.data ?? []).map((row) => {
+  const captures: Capture[] = waRows.map((row) => {
     const r = row as {
       id: string;
       captured_at: string | null;
