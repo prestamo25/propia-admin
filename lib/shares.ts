@@ -54,15 +54,22 @@ export async function fetchShareStats(): Promise<ShareStats> {
   const sb = supabaseAdmin();
   const since = new Date(Date.now() - 30 * 86400000).toISOString();
 
-  const [sendRows, openRows, links] = await Promise.all([
+  const [sendRows, propertyOpens, waOpens, links] = await Promise.all([
+    // share_events ya trae TODOS los envíos (property, event y wa_capture).
     pageAll<{ created_at: string; sharer_id: string }>(() =>
       sb.from("share_events").select("created_at, sharer_id").gte("created_at", since),
     ),
     pageAll<{ created_at: string; sharer_id: string | null }>(() =>
       sb.from("share_views").select("created_at, sharer_id").gte("created_at", since),
     ),
+    // Aperturas de fichas de capturas (/w/<code>) — tabla propia porque el
+    // FK apunta a wa_share_links; para el panel son la misma métrica.
+    pageAll<{ created_at: string; sharer_id: string | null }>(() =>
+      sb.from("wa_share_views").select("created_at, sharer_id").gte("created_at", since),
+    ),
     pageAll<{ sharer_id: string }>(() => sb.from("share_links").select("sharer_id")),
   ]);
+  const openRows = [...propertyOpens, ...waOpens];
 
   const today = new Date().toLocaleDateString("en-CA", { timeZone: TZ });
   const weekAgo = Date.now() - 7 * 86400000;
