@@ -1,4 +1,5 @@
 import { fetchPanorama, type Panorama, type WeekPoint } from "@/lib/analytics";
+import { fetchShareStats, type ShareDay, type ShareStats } from "@/lib/shares";
 import { TopNav } from "@/components/TopNav";
 
 export const dynamic = "force-dynamic";
@@ -11,8 +12,9 @@ const SERIES = [
 
 export default async function PanoramaPage() {
   let data: Panorama;
+  let shares: ShareStats | null = null;
   try {
-    data = await fetchPanorama();
+    [data, shares] = await Promise.all([fetchPanorama(), fetchShareStats().catch(() => null)]);
   } catch (e) {
     return (
       <div className="min-h-screen bg-neutral-50">
@@ -94,6 +96,88 @@ export default async function PanoramaPage() {
             <SupplyDemand rows={supplyDemand} />
           </Card>
         </div>
+
+        {/* Compartir con cliente — envíos reales (cada tap) y aperturas
+            verificadas (desde el navegador del cliente). */}
+        {shares && (
+          <Card className="mt-8">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-base font-semibold tracking-tight text-neutral-900">
+                  Compartidas con clientes
+                </h2>
+                <p className="mt-0.5 text-xs text-neutral-500">
+                  Un envío por cada «Compartir con cliente»; una apertura por cliente, ficha y día.
+                </p>
+              </div>
+              <div className="flex items-center gap-4">
+                <span className="inline-flex items-center gap-1.5 text-xs text-neutral-500">
+                  <span className="h-2 w-2 rounded-full" style={{ background: "#1c4588" }} />
+                  Envíos
+                </span>
+                <span className="inline-flex items-center gap-1.5 text-xs text-neutral-500">
+                  <span className="h-2 w-2 rounded-full" style={{ background: "#10b981" }} />
+                  Aperturas
+                </span>
+              </div>
+            </div>
+
+            <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+              <Kpi label="Envíos hoy" value={shares.sends.today} dot="#1c4588" />
+              <Kpi label="Envíos 7d" value={shares.sends.week} dot="#1c4588" />
+              <Kpi label="Aperturas 7d" value={shares.opens.week} dot="#10b981" />
+              <Kpi label="Brokers 7d" value={shares.brokersWeek} dot="#7c3aed" />
+              <Kpi label="Envíos 30d" value={shares.sends.month} dot="#0e7490" />
+            </div>
+
+            {shares.counting ? (
+              <>
+                <SharesChart data={shares.days} />
+                {shares.topBrokers.length > 0 && (
+                  <div className="mt-6">
+                    <h3 className="mb-2 text-sm font-medium text-neutral-700">
+                      Quién comparte más · últimos 7 días
+                    </h3>
+                    <div className="overflow-hidden rounded-xl border border-black/[0.05]">
+                      <table className="w-full text-sm">
+                        <thead className="bg-neutral-50 text-xs uppercase tracking-wide text-neutral-500">
+                          <tr>
+                            <th className="px-3 py-2 text-left font-medium">Broker</th>
+                            <th className="px-3 py-2 text-right font-medium">Envíos</th>
+                            <th className="px-3 py-2 text-right font-medium">Aperturas</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {shares.topBrokers.map((b) => (
+                            <tr key={b.id} className="border-t border-black/[0.04]">
+                              <td className="px-3 py-2 text-neutral-800">{b.name}</td>
+                              <td className="px-3 py-2 text-right tabular-nums text-neutral-900">
+                                {b.sends}
+                              </td>
+                              <td className="px-3 py-2 text-right tabular-nums text-neutral-600">
+                                {b.opens}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              <p className="rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                El contador empieza hoy. Los envíos anteriores no se pueden reconstruir: el enlace
+                se reutilizaba, así que sólo sabíamos cuántas fichas distintas se habían compartido.
+              </p>
+            )}
+
+            <p className="mt-4 text-xs text-neutral-500">
+              Histórico previo al contador: {shares.baseline.fichas} fichas distintas compartidas por{" "}
+              {shares.baseline.brokers} brokers.
+            </p>
+          </Card>
+        )}
       </main>
     </div>
   );
@@ -179,6 +263,60 @@ function GrowthChart({ data }: { data: WeekPoint[] }) {
               y={H - 10}
               textAnchor="middle"
               fontSize="11"
+              fill="#9ca3af"
+            >
+              {d.label}
+            </text>
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
+function SharesChart({ data }: { data: ShareDay[] }) {
+  const W = 760;
+  const H = 200;
+  const padX = 12;
+  const padTop = 16;
+  const padBottom = 26;
+  const plotW = W - padX * 2;
+  const plotH = H - padTop - padBottom;
+  const baseY = padTop + plotH;
+  const groupW = plotW / data.length;
+  const barW = 10;
+  const stride = 13;
+  const groupInset = (groupW - (barW * 2 + stride)) / 2;
+  const max = Math.max(1, ...data.flatMap((d) => [d.sends, d.opens]));
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full" role="img">
+      <line x1={padX} y1={baseY} x2={W - padX} y2={baseY} stroke="#e5e7eb" strokeWidth="1" />
+      {data.map((d, i) => {
+        const gx = padX + i * groupW + groupInset;
+        return (
+          <g key={d.day}>
+            {[
+              { v: d.sends, color: "#1c4588" },
+              { v: d.opens, color: "#10b981" },
+            ].map((s, j) =>
+              s.v > 0 ? (
+                <rect
+                  key={j}
+                  x={gx + j * stride}
+                  y={baseY - (s.v / max) * plotH}
+                  width={barW}
+                  height={(s.v / max) * plotH}
+                  rx={3}
+                  fill={s.color}
+                />
+              ) : null,
+            )}
+            <text
+              x={padX + i * groupW + groupW / 2}
+              y={H - 8}
+              textAnchor="middle"
+              fontSize="10"
               fill="#9ca3af"
             >
               {d.label}
