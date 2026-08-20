@@ -7,7 +7,9 @@ import Link from "next/link";
 const emptySubscribe = () => () => {};
 
 type NavKey =
+  | "inicio"
   | "brokers"
+  | "aprobaciones"
   | "alta"
   | "envivo"
   | "panorama"
@@ -40,10 +42,12 @@ export function MobileNav({
   active,
   isDev,
   openReports,
+  pendingUsers,
 }: {
   active: NavKey;
   isDev: boolean;
   openReports: number;
+  pendingUsers: number;
 }) {
   const [open, setOpen] = useState(false);
   // Portal target only exists client-side; false during SSR/hydration.
@@ -75,7 +79,19 @@ export function MobileNav({
   const main: Item[] = [
     {
       href: "/",
-      label: "Brokers",
+      label: "Inicio",
+      key: "inicio",
+      icon: (
+        <svg {...STROKE}>
+          <path d="M3 9.5 12 3l9 6.5" />
+          <path d="M5 10v10h14V10" />
+          <path d="M9 21v-6h6v6" />
+        </svg>
+      ),
+    },
+    {
+      href: "/brokers",
+      label: "Miembros",
       key: "brokers",
       icon: (
         <svg {...STROKE}>
@@ -87,15 +103,14 @@ export function MobileNav({
       ),
     },
     {
-      href: "/alta",
-      label: "SMS",
-      key: "alta",
+      href: "/aprobaciones",
+      label: "Aprobaciones",
+      key: "aprobaciones",
+      badge: pendingUsers,
       icon: (
         <svg {...STROKE}>
-          <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-          <circle cx="9" cy="7" r="4" />
-          <line x1="19" x2="19" y1="8" y2="14" />
-          <line x1="22" x2="16" y1="11" y2="11" />
+          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+          <polyline points="22 4 12 14.01 9 11.01" />
         </svg>
       ),
     },

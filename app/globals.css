@@ -8,7 +8,7 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
+  --font-sans: var(--font-dm-sans);
   --font-mono: var(--font-geist-mono);
 }
 
@@ -27,17 +27,48 @@
 body {
   color: var(--foreground);
   background-color: var(--background);
-  /* Fine dot grid over a soft top-down gradient — subtle texture, never busy. */
+  /* Fine dot grid + Propia's brand washes (the same radial recipe as the
+     app's web shell) over a soft top-down gradient — branded, never busy. */
   background-image: radial-gradient(
       circle at 1px 1px,
       rgba(16, 24, 40, 0.045) 1px,
       transparent 0
     ),
+    radial-gradient(1100px 560px at 12% -8%, rgba(28, 69, 136, 0.07), transparent 62%),
+    radial-gradient(900px 520px at 106% 108%, rgba(28, 69, 136, 0.05), transparent 58%),
     radial-gradient(130% 130% at 50% -25%, #ffffff 0%, #f4f6f9 52%, #e9edf3 100%);
-  background-size: 22px 22px, 100% 100%;
-  background-repeat: repeat, no-repeat;
+  background-size: 22px 22px, 100% 100%, 100% 100%, 100% 100%;
+  background-repeat: repeat, no-repeat, no-repeat, no-repeat;
   background-attachment: fixed;
-  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  font-family: var(--font-dm-sans), system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+}
+
+/* Slim, self-effacing scrollbar for in-card lists (the live feed). The
+   default chunky bar sat on top of the timestamps. Thumb only appears on
+   hover/scroll; the track never paints. */
+.scroll-slim {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+  transition: scrollbar-color 200ms;
+}
+.scroll-slim:hover {
+  scrollbar-color: rgba(16, 24, 40, 0.18) transparent;
+}
+.scroll-slim::-webkit-scrollbar {
+  width: 6px;
+}
+.scroll-slim::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scroll-slim::-webkit-scrollbar-thumb {
+  background-color: transparent;
+  border-radius: 999px;
+}
+.scroll-slim:hover::-webkit-scrollbar-thumb {
+  background-color: rgba(16, 24, 40, 0.18);
+}
+.scroll-slim::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(16, 24, 40, 0.3);
 }

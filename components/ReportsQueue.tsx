@@ -39,7 +39,8 @@ export function ReportsQueue({ data }: { data: ReportsData }) {
   return (
     <div>
       {/* filter segmented */}
-      <div className="mb-5 inline-flex items-center gap-1 rounded-xl bg-neutral-200/40 p-1">
+      {/* max-w + scroll: the three tabs overflowed 390px phones by ~90px. */}
+      <div className="mb-5 flex max-w-full items-center gap-1 overflow-x-auto rounded-xl bg-neutral-200/40 p-1 sm:inline-flex sm:w-auto">
         {FILTERS.map((f) => (
           <button
             key={f.key}
@@ -82,6 +83,32 @@ export function ReportsQueue({ data }: { data: ReportsData }) {
   );
 }
 
+function PersonButton({
+  href,
+  role,
+  name,
+  icon,
+}: {
+  href: string;
+  role: string;
+  name: string | null;
+  icon: React.ReactNode;
+}) {
+  return (
+    <Link
+      href={href}
+      className="inline-flex items-center gap-1.5 rounded-lg border border-brand/25 bg-white px-2.5 py-1.5 text-sm shadow-sm transition hover:-translate-y-px hover:border-brand/50 hover:bg-brand-light hover:shadow"
+    >
+      {icon}
+      <span className="text-xs text-neutral-400">{role}:</span>
+      <span className="font-medium text-brand">{name ?? "Ver perfil"}</span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-3 w-3 text-brand opacity-60">
+        <path d="m9 18 6-6-6-6" />
+      </svg>
+    </Link>
+  );
+}
+
 function ReportCard({ report: r }: { report: ReportRow }) {
   const [pending, startTransition] = useTransition();
   const t = TARGET[r.target_type];
@@ -112,7 +139,6 @@ function ReportCard({ report: r }: { report: ReportRow }) {
 
           <p className="mt-1 truncate text-sm text-neutral-600">
             {r.target_label ?? "—"}
-            {r.owner_name ? <span className="text-neutral-400"> · de {r.owner_name}</span> : null}
           </p>
 
           {r.note ? (
@@ -121,18 +147,34 @@ function ReportCard({ report: r }: { report: ReportRow }) {
             </p>
           ) : null}
 
-          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-neutral-400">
-            <span>Reportado por {r.reporter_name ?? "—"}</span>
-            <span>·</span>
-            <span>{when.label}</span>
+          {/* Both parties as buttons — the accused and the reporter each
+              drill into their broker profile (Franz 2026-08-20). */}
+          <div className="mt-3 flex flex-wrap items-center gap-2">
             {r.owner_id ? (
-              <Link
+              <PersonButton
                 href={`/broker/${r.owner_id}`}
-                className="font-medium text-brand hover:underline"
-              >
-                Ver broker ›
-              </Link>
+                role="Reportado"
+                name={r.owner_name}
+                icon={
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5 text-rose-500">
+                    <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
+                    <line x1="4" x2="4" y1="22" y2="15" />
+                  </svg>
+                }
+              />
             ) : null}
+            <PersonButton
+              href={`/broker/${r.reporter_id}`}
+              role="Reportó"
+              name={r.reporter_name}
+              icon={
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5 text-neutral-400">
+                  <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+                  <circle cx="9" cy="7" r="4" />
+                </svg>
+              }
+            />
+            <span className="text-xs text-neutral-400">{when.label}</span>
           </div>
         </div>
 

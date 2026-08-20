@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import type { BrokerRow } from "@/lib/data";
 import { BlockButton } from "@/components/BlockButton";
 import { filterBrokers } from "@/lib/brokerFilter";
+import { tierOf, profileTypeLabel, type Tier } from "@/lib/profileTypes";
 import {
   STATUS_LABEL,
   avatarColors,
@@ -48,11 +49,20 @@ function statusMeta(status: string | null) {
 export function BrokerTable({ brokers }: { brokers: BrokerRow[] }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
+  const [tier, setTier] = useState<"todos" | Tier>("todos");
   const [sortKey, setSortKey] = useState<SortKey>("created_at");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
+  const tierCounts = useMemo(() => {
+    const c = { todos: brokers.length, asesor: 0, servicios: 0, cliente: 0 };
+    for (const b of brokers) c[tierOf(b.profile_type)]++;
+    return c;
+  }, [brokers]);
+
   const rows = useMemo(() => {
-    const filtered = filterBrokers(brokers, query);
+    const inTier =
+      tier === "todos" ? brokers : brokers.filter((b) => tierOf(b.profile_type) === tier);
+    const filtered = filterBrokers(inTier, query);
 
     const dir = sortDir === "asc" ? 1 : -1;
     return [...filtered].sort((a, b) => {
@@ -70,7 +80,7 @@ export function BrokerTable({ brokers }: { brokers: BrokerRow[] }) {
           );
       }
     });
-  }, [brokers, query, sortKey, sortDir]);
+  }, [brokers, tier, query, sortKey, sortDir]);
 
   function toggleSort(key: SortKey) {
     if (key === sortKey) {
@@ -83,6 +93,37 @@ export function BrokerTable({ brokers }: { brokers: BrokerRow[] }) {
 
   return (
     <div className="overflow-hidden rounded-2xl border border-black/[0.05] bg-white/90 shadow-soft backdrop-blur-sm">
+      {/* Tier tabs: everyone / asesores / proveedores de servicios / clientes */}
+      <div className="flex items-center gap-1 overflow-x-auto border-b border-neutral-100 px-4 py-2.5">
+        {(
+          [
+            ["todos", "Todos"],
+            ["asesor", "Asesores"],
+            ["servicios", "Servicios"],
+            ["cliente", "Clientes"],
+          ] as const
+        ).map(([key, label]) => (
+          <button
+            key={key}
+            onClick={() => setTier(key)}
+            className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium transition ${
+              tier === key
+                ? "bg-brand text-white shadow-sm"
+                : "text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800"
+            }`}
+          >
+            {label}
+            <span
+              className={`text-xs tabular-nums ${
+                tier === key ? "text-white/60" : "text-neutral-400"
+              }`}
+            >
+              {tierCounts[key]}
+            </span>
+          </button>
+        ))}
+      </div>
+
       {/* Toolbar */}
       <div className="flex items-center justify-between gap-3 border-b border-neutral-100 px-4 py-3">
         <div className="relative w-full max-w-xs">
@@ -102,13 +143,13 @@ export function BrokerTable({ brokers }: { brokers: BrokerRow[] }) {
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Buscar broker, teléfono, estado…"
+            placeholder="Buscar miembro, teléfono, estado…"
             className="w-full rounded-lg border border-neutral-200 bg-neutral-50/60 py-2 pl-9 pr-3 text-sm text-neutral-900 outline-none transition focus:border-brand focus:bg-white focus:ring-4 focus:ring-brand/10"
           />
         </div>
         <div className="flex shrink-0 items-center gap-3">
           <span className="hidden text-sm tabular-nums text-neutral-400 sm:inline">
-            {rows.length} {rows.length === 1 ? "broker" : "brokers"}
+            {rows.length} {rows.length === 1 ? "miembro" : "miembros"}
           </span>
           <ExcelButton query={query} count={rows.length} />
         </div>
@@ -146,6 +187,11 @@ export function BrokerTable({ brokers }: { brokers: BrokerRow[] }) {
                   <span className="truncate font-medium text-neutral-900">
                     {b.name ?? "—"}
                   </span>
+                  {tierOf(b.profile_type) !== "asesor" ? (
+                    <span className="shrink-0 rounded-md bg-indigo-50 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-700 ring-1 ring-indigo-600/10">
+                      {profileTypeLabel(b.profile_type)}
+                    </span>
+                  ) : null}
                   {b.blocked ? (
                     <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-rose-500" />
                   ) : (
@@ -196,7 +242,7 @@ export function BrokerTable({ brokers }: { brokers: BrokerRow[] }) {
           <thead className="sticky top-0 z-10 bg-neutral-50/80 backdrop-blur">
             <tr className="text-xs uppercase tracking-wide text-neutral-500">
               <Th sortKey="name" active={sortKey} dir={sortDir} onSort={toggleSort}>
-                Broker
+                Miembro
               </Th>
               <Th>Teléfono</Th>
               <Th>Estados</Th>
@@ -244,8 +290,13 @@ export function BrokerTable({ brokers }: { brokers: BrokerRow[] }) {
                         </span>
                       )}
                       <div className="min-w-0">
-                        <div className="truncate font-medium text-neutral-900 group-hover:text-brand">
-                          {b.name ?? "—"}
+                        <div className="flex items-center gap-1.5 truncate font-medium text-neutral-900 group-hover:text-brand">
+                          <span className="truncate">{b.name ?? "—"}</span>
+                          {tierOf(b.profile_type) !== "asesor" ? (
+                            <span className="shrink-0 rounded-md bg-indigo-50 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-700 ring-1 ring-indigo-600/10">
+                              {profileTypeLabel(b.profile_type)}
+                            </span>
+                          ) : null}
                         </div>
                         {b.company ? (
                           <div className="truncate text-xs text-neutral-400">

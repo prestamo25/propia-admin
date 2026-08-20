@@ -11,6 +11,7 @@ export type ReportRow = {
   note: string | null;
   status: ReportStatus;
   created_at: string;
+  reporter_id: string;
   reporter_name: string | null;
   owner_name: string | null;
   owner_id: string | null; // the broker behind the reported content (to drill in)
@@ -104,7 +105,8 @@ export async function fetchReports(): Promise<ReportsData> {
       note: r.note,
       status: r.status,
       created_at: r.created_at,
-      reporter_name: fullName(userMap.get(r.reporter_id)),
+      reporter_id: r.reporter_id,
+    reporter_name: fullName(userMap.get(r.reporter_id)),
       owner_name: owner_id ? fullName(userMap.get(owner_id)) : null,
       owner_id,
       target_label,

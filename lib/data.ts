@@ -22,6 +22,8 @@ export type BrokerRow = {
   // Auth-level ban (auth.users.banned_until in the future). This is the block
   // state — independent of users.status.
   blocked: boolean;
+  // users.profile_type — 'asesor' | 'cliente' | one of the 9 service types.
+  profile_type: string;
 };
 
 export type Overview = {
@@ -52,7 +54,7 @@ export async function fetchOverview(): Promise<Overview> {
       sb
         .from("users")
         .select(
-          "id, name, first_name, last_name, company, phone, email, states, status, created_at, last_active, avatar_url, whatsapp_opt_in",
+          "id, name, first_name, last_name, company, phone, email, states, status, created_at, last_active, avatar_url, whatsapp_opt_in, profile_type",
         )
         .order("created_at", { ascending: false }),
     ),
@@ -95,6 +97,7 @@ export async function fetchOverview(): Promise<Overview> {
       last_active: string | null;
       avatar_url: string | null;
       whatsapp_opt_in: boolean | null;
+      profile_type: string | null;
     };
     const full =
       [row.first_name, row.last_name].filter(Boolean).join(" ").trim() ||
@@ -115,6 +118,7 @@ export async function fetchOverview(): Promise<Overview> {
       inventory: counts.get(row.id) ?? 0,
       mb_used: null,
       blocked: banned.get(row.id) ?? false,
+      profile_type: row.profile_type ?? "asesor",
     };
   });
 
