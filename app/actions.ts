@@ -29,6 +29,36 @@ export async function blockBroker(id: string): Promise<Result> {
   return {};
 }
 
+// Approve a pending account. The app's pending screen listens on the users
+// row over Realtime, so the member's phone flips to "¡Listo!" live.
+export async function approveUser(id: string): Promise<Result> {
+  if (!id) return { error: "Falta el id." };
+  const sb = supabaseAdmin();
+  const { error } = await sb
+    .from("users")
+    .update({ status: "approved", rejection_reason: null })
+    .eq("id", id);
+  if (error) return { error: error.message };
+  revalidatePath("/aprobaciones");
+  return {};
+}
+
+// Reject a pending account. status='rejected' + the reason the applicant is
+// shown. Reversible: re-approving simply sets status back and clears it.
+export async function rejectUser(id: string, reason: string): Promise<Result> {
+  if (!id) return { error: "Falta el id." };
+  const clean = reason.trim();
+  if (clean.length < 3) return { error: "Escribe un motivo." };
+  const sb = supabaseAdmin();
+  const { error } = await sb
+    .from("users")
+    .update({ status: "rejected", rejection_reason: clean })
+    .eq("id", id);
+  if (error) return { error: error.message };
+  revalidatePath("/aprobaciones");
+  return {};
+}
+
 export async function unblockBroker(id: string): Promise<Result> {
   if (!id) return { error: "Falta el id." };
   const sb = supabaseAdmin();
