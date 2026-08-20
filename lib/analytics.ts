@@ -10,6 +10,16 @@ export type WeekPoint = {
 
 export type StateLiquidity = { state: string; supply: number; demand: number };
 
+// Cumulative network size at each week's end — LEVELS, not flows. This is
+// the chart that answers "how big are we?"; WeekPoint answers "what happened
+// this week?".
+export type CumPoint = {
+  label: string;
+  members: number;
+  properties: number;
+  requerimientos: number;
+};
+
 export type Panorama = {
   kpis: {
     brokers: number;
@@ -20,6 +30,7 @@ export type Panorama = {
     offers: number;
   };
   growth: WeekPoint[];
+  cumulative: CumPoint[];
   activity: {
     active7d: number;
     active8to30: number;
@@ -95,6 +106,55 @@ export async function fetchPanorama(): Promise<Panorama> {
   for (const p of props) bump(p.created_at, "listings");
   for (const r of reqs) bump(r.created_at, "requerimientos");
 
+  // ── cumulative: weekly network totals since the first signup (cap 26w) ────
+  const CUM_WEEKS = 26;
+  const stamps = [
+    ...users.map((u) => u.created_at),
+    ...props.map((p) => p.created_at),
+    ...reqs.map((r) => r.created_at),
+  ]
+    .filter((c): c is string => !!c)
+    .map((c) => new Date(c).getTime());
+  const firstWeek = startOfWeek(new Date(Math.min(...stamps, Date.now())));
+  const cumStart = new Date(
+    Math.max(firstWeek.getTime(), thisWeek.getTime() - (CUM_WEEKS - 1) * 7 * DAY),
+  );
+  const cumWeeks: Date[] = [];
+  for (let t = cumStart.getTime(); t <= thisWeek.getTime(); t += 7 * DAY) {
+    cumWeeks.push(new Date(t));
+  }
+  const cumSeries = (rows: { created_at: string | null }[]) => {
+    // Everything created before the window seeds the baseline, so the curve
+    // starts at the true total, not at zero.
+    let base = 0;
+    const perWeek = new Array(cumWeeks.length).fill(0);
+    for (const r of rows) {
+      if (!r.created_at) continue;
+      const wt = startOfWeek(new Date(r.created_at)).getTime();
+      if (wt < cumStart.getTime()) base++;
+      else {
+        const i = Math.round((wt - cumStart.getTime()) / (7 * DAY));
+        if (i >= 0 && i < perWeek.length) perWeek[i]++;
+      }
+    }
+    const out: number[] = [];
+    let acc = base;
+    for (const n of perWeek) {
+      acc += n;
+      out.push(acc);
+    }
+    return out;
+  };
+  const mem = cumSeries(users);
+  const pro = cumSeries(props);
+  const req = cumSeries(reqs);
+  const cumulative: CumPoint[] = cumWeeks.map((w, i) => ({
+    label: w.toLocaleDateString("es-MX", { day: "2-digit", month: "short" }),
+    members: mem[i],
+    properties: pro[i],
+    requerimientos: req[i],
+  }));
+
   // ── activity (mutually exclusive buckets) ─────────────────────────────────
   const now = Date.now();
   let active7d = 0;
@@ -141,6 +201,7 @@ export async function fetchPanorama(): Promise<Panorama> {
       offers: offersRes.count ?? 0,
     },
     growth,
+    cumulative,
     activity,
     supplyDemand,
   };
