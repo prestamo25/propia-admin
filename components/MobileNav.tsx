@@ -41,11 +41,13 @@ const STROKE = {
 export function MobileNav({
   active,
   isDev,
+  roleBadge,
   openReports,
   pendingUsers,
 }: {
   active: NavKey;
   isDev: boolean;
+  roleBadge: { label: string; cls: string };
   openReports: number;
   pendingUsers: number;
 }) {
@@ -275,13 +277,9 @@ export function MobileNav({
               Propia
             </span>
             <span
-              className={`rounded-md px-1.5 py-0.5 text-[11px] font-medium ${
-                isDev
-                  ? "bg-violet-100 text-violet-700"
-                  : "bg-neutral-100 text-neutral-500"
-              }`}
+              className={`rounded-md px-1.5 py-0.5 text-[11px] font-medium ${roleBadge.cls}`}
             >
-              {isDev ? "Técnico" : "Admin"}
+              {roleBadge.label}
             </span>
           </div>
           <button

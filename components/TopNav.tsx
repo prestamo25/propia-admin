@@ -24,6 +24,12 @@ export async function TopNav({ active }: { active: NavKey }) {
     getRole(),
   ]);
   const isDev = role === "dev";
+  const roleBadge =
+    role === "dev"
+      ? { label: "Técnico", cls: "bg-violet-100 text-violet-700" }
+      : role === "mariana"
+        ? { label: "Mariana", cls: "bg-sky-100 text-sky-700" }
+        : { label: "Admin", cls: "bg-neutral-100 text-neutral-500" };
 
   const devActive = ["whatsapp", "almacenamiento", "lifecycle"].includes(active);
 
@@ -85,13 +91,9 @@ export async function TopNav({ active }: { active: NavKey }) {
               </span>
             </Link>
             <span
-              className={`rounded-md px-1.5 py-0.5 text-[11px] font-medium ${
-                isDev
-                  ? "bg-violet-100 text-violet-700"
-                  : "bg-neutral-100 text-neutral-500"
-              }`}
+              className={`rounded-md px-1.5 py-0.5 text-[11px] font-medium ${roleBadge.cls}`}
             >
-              {isDev ? "Técnico" : "Admin"}
+              {roleBadge.label}
             </span>
           </div>
           <nav className="hidden items-center gap-1 rounded-xl bg-neutral-200/40 p-1 md:flex">
@@ -151,6 +153,7 @@ export async function TopNav({ active }: { active: NavKey }) {
         <MobileNav
           active={active}
           isDev={isDev}
+          roleBadge={roleBadge}
           openReports={openReports}
           pendingUsers={pendingUsers}
         />

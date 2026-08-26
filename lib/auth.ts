@@ -1,20 +1,24 @@
 // Stateless role-aware session for the password-per-role gate. The cookie holds
 // "<role>.<hmac>", where the HMAC (keyed by SESSION_SECRET) is computed over the
 // role itself — so the role can't be tampered with, and being httpOnly it can't
-// be read by client JS. Two roles today:
-//   • admin  — Pablo / business: Brokers · Panorama · Reportes
-//   • dev    — técnico (superuser): everything above + technical screens
-// Each role has its own password (ADMIN_PASSWORD / DEV_PASSWORD).
+// be read by client JS. Three roles today:
+//   • admin   — Pablo / business: everything except the Técnico screens
+//   • mariana — Mariana: same tier as admin, own revocable password
+//   • dev     — técnico (superuser): everything above + technical screens
+// Each role has its own password (ADMIN_PASSWORD / MARIANA_PASSWORD /
+// DEV_PASSWORD). Removing a role from ROLES invalidates its issued cookies.
 
 export const SESSION_COOKIE = "padmin";
 
-export type Role = "admin" | "dev";
-const ROLES: Role[] = ["admin", "dev"];
+export type Role = "admin" | "mariana" | "dev";
+const ROLES: Role[] = ["admin", "mariana", "dev"];
 
-// dev is a superset of admin (tiered access).
+// Tiered access: gates ask for the tier they need ("admin" = business screens,
+// "dev" = técnico). A role passes any gate at or below its own tier.
+const TIER: Record<Role, number> = { admin: 1, mariana: 1, dev: 2 };
+
 export function roleCan(role: Role, needs: Role): boolean {
-  if (role === "dev") return true; // superuser
-  return role === needs;
+  return TIER[role] >= TIER[needs];
 }
 
 const encoder = new TextEncoder();

@@ -7,6 +7,7 @@ export async function POST(req: Request) {
 
   let role: Role | null = null;
   if (password && password === process.env.ADMIN_PASSWORD) role = "admin";
+  else if (password && password === process.env.MARIANA_PASSWORD) role = "mariana";
   else if (password && password === process.env.DEV_PASSWORD) role = "dev";
 
   // Relative Location: behind Lambda Web Adapter the request host is the
