@@ -6,7 +6,7 @@ import { fetchFailures, fetchCandidates, fetchSalud, fetchZonas } from "@/lib/zo
 export const dynamic = "force-dynamic";
 
 export default async function ZonasPage() {
-  await requireRole("dev");
+  await requireRole("admin");
 
   let failures, salud, zonas, initial = null;
   try {
@@ -74,35 +74,8 @@ export default async function ZonasPage() {
         </div>
 
         <div className="mt-6">
-          <ZonaBench failures={failures} initial={initial} />
+          <ZonaBench failures={failures} zonas={zonas} initial={initial} />
         </div>
-
-        {/* what exists today */}
-        <section className="mt-8">
-          <h2 className="text-[10px] font-semibold uppercase tracking-wider text-neutral-400">
-            Zonas curadas
-          </h2>
-          <ul className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            {zonas.map((z) => (
-              <li
-                key={z.key}
-                className="rounded-xl bg-white p-3 shadow-sm ring-1 ring-black/[0.05]"
-              >
-                <div className="flex items-baseline justify-between gap-2">
-                  <span className="truncate text-sm font-medium text-neutral-900">
-                    {z.nombre.replace(" (ZONA)", "")}
-                  </span>
-                  <span className="shrink-0 text-xs tabular-nums text-neutral-500">
-                    {z.props} props
-                  </span>
-                </div>
-                <p className="mt-0.5 truncate text-xs text-neutral-500">
-                  {z.municipio} · {z.miembros?.length ?? 0} polígonos
-                </p>
-              </li>
-            ))}
-          </ul>
-        </section>
 
         {/* per-state health */}
         <section className="mt-8">

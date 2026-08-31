@@ -50,6 +50,7 @@ export function ZonaMap({
   picked,
   drawing,
   hasDrawn,
+  editSeed,
   onToggle,
   onDrawn,
 }: {
@@ -60,6 +61,8 @@ export function ZonaMap({
   drawing: boolean;
   /** true while the bench is holding a finished drawing */
   hasDrawn: boolean;
+  /** an existing drawn zone to load as an editable polygon */
+  editSeed: { key: string; ring: Ring } | null;
   onToggle: (key: string) => void;
   /** fires with the closed ring when a polygon is finished or vertex-edited */
   onDrawn: (ring: Ring) => void;
@@ -94,6 +97,10 @@ export function ZonaMap({
   useEffect(() => {
     drawingRef.current = drawing;
   }, [drawing]);
+  const editSeedRef = useRef(editSeed);
+  useEffect(() => {
+    editSeedRef.current = editSeed;
+  }, [editSeed]);
 
   function clearDraft() {
     draft.current = [];
@@ -107,10 +114,10 @@ export function ZonaMap({
     drawnPoly.current = null;
   }
 
-  function finishDraft(m: google.maps.Map) {
-    if (draft.current.length < 3) return;
-    const path = [...draft.current];
-    clearDraft();
+  function mountEditable(
+    m: google.maps.Map,
+    path: { lat: number; lng: number }[] | google.maps.LatLng[],
+  ) {
     const poly = new google.maps.Polygon({ map: m, paths: path, editable: true, ...DRAW_STYLE });
     drawnPoly.current = poly;
     const report = () => {
@@ -125,6 +132,13 @@ export function ZonaMap({
     for (const ev of ["set_at", "insert_at", "remove_at"] as const)
       p.addListener(ev, report);
     report();
+  }
+
+  function finishDraft(m: google.maps.Map) {
+    if (draft.current.length < 3) return;
+    const path = [...draft.current];
+    clearDraft();
+    mountEditable(m, path);
   }
 
   // init once
@@ -237,6 +251,21 @@ export function ZonaMap({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // editing an existing drawn zone: load its boundary as the editable polygon
+  useEffect(() => {
+    const m = map.current;
+    if (!m || !ready) return;
+    if (!editSeed) return;
+    clearDraft();
+    clearDrawn();
+    // drop the duplicated closing point — Polygon paths are implicitly closed
+    const path = editSeed.ring
+      .slice(0, -1)
+      .map(([lng, lat]) => ({ lat, lng }));
+    if (path.length >= 3) mountEditable(m, path);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editSeed?.key, ready]);
+
   // arm/disarm drawing: cursor + double-click zoom; leaving both modes clears
   useEffect(() => {
     const m = map.current;
@@ -249,10 +278,11 @@ export function ZonaMap({
       clearDrawn(); // starting over
       info.current?.close();
     }
-    if (!drawing && !hasDrawn) {
+    if (!drawing && !hasDrawn && !editSeed) {
       clearDraft();
       clearDrawn();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [drawing, hasDrawn, ready]);
 
   // data: polygons + pins (rebuilt when the selection target changes)
@@ -310,6 +340,20 @@ export function ZonaMap({
         any = true;
       });
     });
+    if (!any) {
+      // zone-edit mode has no pins: frame on the members / the drawn boundary
+      m.data.forEach((f) => {
+        if (!pickedRef.current.includes(f.getProperty("key") as string)) return;
+        f.getGeometry()?.forEachLatLng((ll) => {
+          b.extend(ll);
+          any = true;
+        });
+      });
+      for (const [lng, lat] of editSeedRef.current?.ring ?? []) {
+        b.extend({ lat, lng });
+        any = true;
+      }
+    }
     if (any) {
       // fitBounds has no zoom cap of its own — clamp, fit, then release.
       m.setOptions({ maxZoom: 15 });

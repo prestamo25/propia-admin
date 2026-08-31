@@ -17,7 +17,9 @@ export type Failure = {
   nombre: string;
   estado: string;
   props: number;
+  brokers: number;
   ejemplo: string | null;
+  catalogo: boolean;
 };
 
 export type Candidate = {
@@ -34,6 +36,21 @@ export type CandidateSet = {
   pins: [number, number][];
   sin_coords: number;
   candidatos: Candidate[];
+};
+
+export type ZonaDetail = {
+  key: string;
+  nombre: string;
+  municipio: string;
+  estado: string;
+  dibujada: boolean;
+  km2: number;
+  props: number;
+  geom: { type: string; coordinates: unknown };
+  miembros: { key: string; nombre: string; municipio: string;
+              geom: { type: string; coordinates: unknown } }[];
+  vecinos: { key: string; nombre: string; municipio: string;
+             geom: { type: string; coordinates: unknown } }[];
 };
 
 export type Zona = {
@@ -118,4 +135,14 @@ export async function fetchSalud(): Promise<Salud[]> {
       pct: r.props ? Math.round((r.ligadas / r.props) * 1000) / 10 : 0,
     }),
   );
+}
+
+// Everything about one curated zone: geometry, members, neighbours it could
+// absorb, and the inventory it carries. This is the inspect/edit surface.
+export async function fetchZonaDetail(key: string): Promise<ZonaDetail> {
+  const sb = supabaseAdmin();
+  const { data, error } = await sb.rpc("admin_zona_detail", { p_key: key });
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error(`No existe la zona ${key}`);
+  return data as ZonaDetail;
 }

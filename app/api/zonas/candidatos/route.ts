@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
   const role = await getRole();
-  if (!role || !roleCan(role, "dev")) {
+  if (!role || !roleCan(role, "admin")) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
   const { searchParams } = new URL(req.url);

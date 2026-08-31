@@ -191,8 +191,9 @@ export async function crearZona(
   // The middleware only proves *a* session exists; it knows nothing about
   // roles. An action that writes to production matching enforces its own
   // gate, same tier as the page that hosts it.
+  // Franz 08-31: zone curation opens to the admin tier (Pablo, Mariana).
   const role = await getRole();
-  if (!role || !roleCan(role, "dev")) return { error: "No autorizado." };
+  if (!role || !roleCan(role, "admin")) return { error: "No autorizado." };
 
   const clean = nombre.trim();
   if (clean.length < 3) return { error: "Ponle un nombre a la zona." };
@@ -229,7 +230,7 @@ export async function crearZonaDibujada(
   ring: [number, number][],
 ): Promise<Result & { movidas?: number; key?: string }> {
   const role = await getRole();
-  if (!role || !roleCan(role, "dev")) return { error: "No autorizado." };
+  if (!role || !roleCan(role, "admin")) return { error: "No autorizado." };
 
   const clean = nombre.trim();
   if (clean.length < 3) return { error: "Ponle un nombre a la zona." };
@@ -257,4 +258,56 @@ export async function crearZonaDibujada(
   revalidatePath("/zonas");
   const res = (data ?? {}) as { propiedades_movidas?: number; key?: string };
   return { movidas: res.propiedades_movidas ?? 0, key: res.key };
+}
+
+// Save edits to an EXISTING zone (same key, membership or boundary replaced —
+// the create RPCs upsert by key, which is exactly a rebuild).
+export async function guardarZona(
+  key: string,
+  nombre: string,
+  estado: string,
+  cambio: { miembros: string[] } | { ring: [number, number][] },
+): Promise<Result & { movidas?: number }> {
+  const role = await getRole();
+  if (!role || !roleCan(role, "admin")) return { error: "No autorizado." };
+  if (!/^zona-[a-z0-9-]+$/.test(key)) return { error: "Clave de zona inválida." };
+  const clean = nombre.replace(/ \(ZONA\)$/i, "").trim();
+
+  const sb = supabaseAdmin();
+  const { data, error } =
+    "miembros" in cambio
+      ? await sb.rpc("admin_create_zona", {
+          p_key: key, p_nombre: clean, p_estado: estado, p_miembros: cambio.miembros,
+        })
+      : await sb.rpc("admin_create_zona_drawn", {
+          p_key: key, p_nombre: clean, p_estado: estado,
+          p_geojson: { type: "Polygon", coordinates: [cambio.ring] },
+        });
+  if (error) return { error: error.message };
+  revalidatePath("/zonas");
+  return { movidas: (data as { propiedades_movidas?: number })?.propiedades_movidas ?? 0 };
+}
+
+// Delete a zone; its listings are re-homed before anything else happens.
+export async function borrarZona(key: string): Promise<Result & { movidas?: number }> {
+  const role = await getRole();
+  if (!role || !roleCan(role, "admin")) return { error: "No autorizado." };
+  const sb = supabaseAdmin();
+  const { data, error } = await sb.rpc("admin_delete_zona", { p_key: key });
+  if (error) return { error: error.message };
+  revalidatePath("/zonas");
+  return { movidas: (data as { propiedades_reasignadas?: number })?.propiedades_reasignadas ?? 0 };
+}
+
+// "This is not a zone" — junk names leave the queue for good.
+export async function ignorarNombre(estado: string, nombre: string): Promise<Result> {
+  const role = await getRole();
+  if (!role || !roleCan(role, "admin")) return { error: "No autorizado." };
+  const sb = supabaseAdmin();
+  const { error } = await sb.rpc("admin_dismiss_zona_name", {
+    p_estado: estado, p_nombre: nombre,
+  });
+  if (error) return { error: error.message };
+  revalidatePath("/zonas");
+  return {};
 }
