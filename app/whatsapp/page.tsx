@@ -29,6 +29,11 @@ export default async function WhatsAppPage() {
   }
 
   const { captures, byRegion, kpis, lastCapturedAt } = data;
+  // Server component on a force-dynamic route: freshness is measured at
+  // request time, so reading the clock during render is the point. The purity
+  // rule is written for client components and flags this legitimately-impure
+  // read as if it could re-render.
+  // eslint-disable-next-line react-hooks/purity
   const ageMs = lastCapturedAt ? Date.now() - new Date(lastCapturedAt).getTime() : null;
   const stale = ageMs == null || ageMs > DAY;
   const lastLabel = relative(lastCapturedAt).label;

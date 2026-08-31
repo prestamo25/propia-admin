@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Deploy packaging (Lambda bundle) — build output, not source.
+    "lambda-pkg/**",
   ]),
 ]);
 
