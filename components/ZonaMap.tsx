@@ -1,19 +1,21 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import L from "leaflet";
-import "leaflet/dist/leaflet.css";
+import { importLibrary, setOptions } from "@googlemaps/js-api-loader";
 import type { Candidate } from "@/lib/zonas";
 
-const TILES =
-  process.env.NEXT_PUBLIC_MAP_TILES ?? "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
-const ATTR = process.env.NEXT_PUBLIC_MAP_TILES_ATTR ?? "&copy; OpenStreetMap";
+// Google's basemap, by decision (Franz 08-31): it is the map he already judges
+// zones against, and in México it labels colonias inline — real context for a
+// membership call. Compliance note: the Google-ToS work in the geo project was
+// about STORING Places data in our matching engine; drawing our own INEGI
+// polygons on top of a Google map is the permitted direction.
+//
+// Needs a browser key (Maps JavaScript API) in NEXT_PUBLIC_GOOGLE_MAPS_KEY —
+// separate from the app's Places key, which lives server-side in the
+// places-proxy Edge Function and must stay there. Lock this one by HTTP
+// referrer to admin.propia.dev + localhost:3000.
 
-// Real basemap, on purpose. Judging whether two polygons are one place is a
-// question about streets, highways and where the city actually stops — that
-// context is the difference between guessing and knowing. (The standalone
-// viewer had to fall back to bare SVG because the artifact sandbox blocks
-// external tiles; the panel has no such limit.)
+const KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY ?? "";
 
 const LOW = new Set(["de", "del", "la", "las", "los", "y", "a", "en", "el"]);
 const titleCase = (s: string) =>
@@ -22,6 +24,12 @@ const titleCase = (s: string) =>
     .split(/\s+/)
     .map((w, i) => (i && LOW.has(w) ? w : w.charAt(0).toUpperCase() + w.slice(1)))
     .join(" ");
+
+const STYLE = {
+  picked: { stroke: "#1c4588", fill: "#1c4588", w: 3, op: 0.34 },
+  evid: { stroke: "#b45309", fill: "#f59e0b", w: 2.2, op: 0.2 },
+  rest: { stroke: "#475569", fill: "#64748b", w: 1.4, op: 0.09 },
+};
 
 export function ZonaMap({
   pins,
@@ -34,126 +42,184 @@ export function ZonaMap({
   picked: string[];
   onToggle: (key: string) => void;
 }) {
-  const [failures, setFailures] = useState(0);
   const host = useRef<HTMLDivElement>(null);
-  const map = useRef<L.Map | null>(null);
-  const shapes = useRef<L.LayerGroup | null>(null);
-  const marks = useRef<L.LayerGroup | null>(null);
-  // onToggle changes identity every render; keep it in a ref so redrawing
-  // layers never depends on it.
+  const map = useRef<google.maps.Map | null>(null);
+  const info = useRef<google.maps.InfoWindow | null>(null);
+  const markers = useRef<google.maps.Marker[]>([]);
+  const [ready, setReady] = useState(false);
+  const [authFail, setAuthFail] = useState(false);
+
+  // Callbacks/state the map handlers need, without re-wiring listeners.
   const toggle = useRef(onToggle);
   useEffect(() => {
     toggle.current = onToggle;
   }, [onToggle]);
+  const pickedRef = useRef(picked);
+  useEffect(() => {
+    pickedRef.current = picked;
+  }, [picked]);
 
   // init once
   useEffect(() => {
-    if (!host.current || map.current) return;
-    const m = L.map(host.current, { zoomControl: true, attributionControl: true });
-    // Basemap provider is configurable. The default is OpenStreetMap's own
-    // tile server, which is volunteer-run and rate-limits app traffic with
-    // 503s — fine for the two of us, not something to rely on. Set
-    // NEXT_PUBLIC_MAP_TILES (and _ATTR) to a keyed provider for production.
-    L.tileLayer(TILES, {
-      maxZoom: 19,
-      opacity: 0.62, // let the polygons read on top without hiding the streets
-      attribution: `${ATTR} · Polígonos: INEGI DCAH`,
-      // keep a rejected tile from freezing the view as a stretched parent tile
-      crossOrigin: true,
-    })
-      .on("tileerror", () => {
-        setFailures((n) => n + 1);
+    if (!KEY || !host.current || map.current) return;
+    const el = host.current; // pin the node: the ref may be cleared before cleanup
+    let cancelled = false;
+    // Google calls this global on an invalid/over-restricted key.
+    (window as unknown as { gm_authFailure?: () => void }).gm_authFailure = () =>
+      setAuthFail(true);
+
+    setOptions({ key: KEY, v: "weekly", language: "es", region: "MX" });
+    importLibrary("maps")
+      .then(({ Map: GMap, InfoWindow }) => {
+        if (cancelled) return;
+        const m = new GMap(el, {
+          center: { lat: 19.03, lng: -98.24 },
+          zoom: 12,
+          mapTypeControl: false,
+          streetViewControl: false,
+          fullscreenControl: false,
+          clickableIcons: false,
+        });
+        info.current = new InfoWindow({ disableAutoPan: true, headerDisabled: true });
+
+        m.data.setStyle((f) => {
+          const key = f.getProperty("key") as string;
+          const s = pickedRef.current.includes(key)
+            ? STYLE.picked
+            : (f.getProperty("evid") as boolean)
+              ? STYLE.evid
+              : STYLE.rest;
+          return {
+            strokeColor: s.stroke,
+            strokeWeight: s.w,
+            fillColor: s.fill,
+            fillOpacity: s.op,
+            cursor: "pointer",
+          };
+        });
+        m.data.addListener("click", (e: google.maps.Data.MouseEvent) => {
+          toggle.current(e.feature.getProperty("key") as string);
+        });
+        m.data.addListener("mouseover", (e: google.maps.Data.MouseEvent) => {
+          const nombre = titleCase(e.feature.getProperty("nombre") as string);
+          const mun = e.feature.getProperty("municipio") as string;
+          const n = e.feature.getProperty("pins_dentro") as number;
+          info.current?.setContent(
+            `<div style="font:12px/1.4 system-ui;padding:2px 4px"><b>${nombre}</b><br>` +
+              `${mun}${n ? ` · <b style="color:#e11d48">${n} pins</b>` : ""}</div>`,
+          );
+          if (e.latLng) info.current?.setPosition(e.latLng);
+          info.current?.open({ map: m });
+        });
+        m.data.addListener("mouseout", () => info.current?.close());
+
+        map.current = m;
+        setReady(true);
       })
-      .addTo(m);
-    shapes.current = L.layerGroup().addTo(m);
-    marks.current = L.layerGroup().addTo(m);
-    map.current = m;
-    m.setView([19.03, -98.24], 12);
-    // the pane is measured before the flex parent settles; nudge it once
-    setTimeout(() => m.invalidateSize(), 60);
+      .catch(() => setAuthFail(true));
+
     return () => {
-      m.remove();
+      cancelled = true;
       map.current = null;
+      el.innerHTML = "";
     };
   }, []);
 
-  // polygons + pins
+  // data: polygons + pins (rebuilt when the selection target changes)
   useEffect(() => {
     const m = map.current;
-    if (!m || !shapes.current || !marks.current) return;
-    shapes.current.clearLayers();
-    marks.current.clearLayers();
+    if (!m || !ready) return;
 
+    m.data.forEach((f) => m.data.remove(f));
     for (const c of candidatos) {
-      const on = picked.includes(c.key);
-      const evid = c.pins_dentro > 0 || c.parecido > 0.35;
-      const layer = L.geoJSON(c.geom as never, {
-        // Tuned against the street basemap, not a blank ground: on tiles,
-        // a hairline at 4% fill simply disappears.
-        style: {
-          color: on ? "#1c4588" : evid ? "#b45309" : "#475569",
-          weight: on ? 3 : evid ? 2.2 : 1.4,
-          opacity: on ? 1 : evid ? 0.95 : 0.75,
-          fillColor: on ? "#1c4588" : evid ? "#f59e0b" : "#64748b",
-          fillOpacity: on ? 0.34 : evid ? 0.2 : 0.09,
+      m.data.addGeoJson({
+        type: "Feature",
+        geometry: c.geom,
+        properties: {
+          key: c.key,
+          nombre: c.nombre,
+          municipio: c.municipio,
+          pins_dentro: c.pins_dentro,
+          evid: c.pins_dentro > 0 || c.parecido > 0.35,
         },
       });
-      layer.bindTooltip(
-        `<b>${titleCase(c.nombre)}</b><br>${c.municipio}` +
-          (c.pins_dentro ? ` · <b>${c.pins_dentro} pins</b>` : ""),
-        { sticky: true },
-      );
-      layer.on("click", () => toggle.current(c.key));
-      layer.on("mouseover", () => layer.setStyle({ fillOpacity: on ? 0.44 : 0.3, weight: on ? 3.5 : 3 }));
-      layer.on("mouseout", () => layer.setStyle({
-        fillOpacity: on ? 0.34 : evid ? 0.2 : 0.09,
-        weight: on ? 3 : evid ? 2.2 : 1.4,
-      }));
-      layer.addTo(shapes.current);
     }
 
+    markers.current.forEach((mk) => mk.setMap(null));
+    markers.current = pins.map(
+      ([lng, lat]) =>
+        new google.maps.Marker({
+          map: m,
+          position: { lat, lng },
+          clickable: false,
+          icon: {
+            path: google.maps.SymbolPath.CIRCLE,
+            scale: 5.5,
+            fillColor: "#e11d48",
+            fillOpacity: 1,
+            strokeColor: "#ffffff",
+            strokeWeight: 1.5,
+          },
+        }),
+    );
+
+    // Frame on the evidence: pins + polygons that contain one. Loose name
+    // matches two municipios away stay clickable but must not set the view.
+    const b = new google.maps.LatLngBounds();
+    let any = false;
     for (const [lng, lat] of pins) {
-      L.circleMarker([lat, lng], {
-        radius: 5,
-        color: "#fff",
-        weight: 1.5,
-        fillColor: "#e11d48",
-        fillOpacity: 1,
-      }).addTo(marks.current);
+      b.extend({ lat, lng });
+      any = true;
     }
-  }, [candidatos, pins, picked]);
+    m.data.forEach((f) => {
+      if (!(f.getProperty("pins_dentro") as number)) return;
+      f.getGeometry()?.forEachLatLng((ll) => {
+        b.extend(ll);
+        any = true;
+      });
+    });
+    if (any) {
+      // fitBounds has no zoom cap of its own — clamp, fit, then release.
+      m.setOptions({ maxZoom: 15 });
+      m.fitBounds(b, 48);
+      google.maps.event.addListenerOnce(m, "idle", () =>
+        m.setOptions({ maxZoom: undefined }),
+      );
+    }
+  }, [candidatos, pins, ready]);
 
-  // frame on the evidence: pins + picked + polygons that contain a pin. A loose
-  // name match two municipios away stays clickable but must not set the view.
+  // restyle on selection change (no feature rebuild, no re-frame)
   useEffect(() => {
     const m = map.current;
-    if (!m) return;
-    const focus = candidatos.filter((c) => picked.includes(c.key) || c.pins_dentro > 0);
-    const b = L.latLngBounds([]);
-    for (const [lng, lat] of pins) b.extend([lat, lng]);
-    for (const c of focus) {
-      try {
-        b.extend(L.geoJSON(c.geom as never).getBounds());
-      } catch {
-        /* skip unusable geometry */
-      }
-    }
-    // Cap the zoom: a tight two-polygon cluster would otherwise fill the pane
-    // at street level, which loses the surrounding context that makes the
-    // "is this one place?" judgement possible.
-    if (b.isValid()) m.fitBounds(b, { padding: [48, 48], maxZoom: 15 });
-    // deliberately not reacting to `picked`: re-framing on every checkbox
-    // would yank the map while you are still choosing.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [candidatos, pins]);
+    if (m && ready) m.data.setStyle(m.data.getStyle() as google.maps.Data.StylingFunction);
+  }, [picked, ready]);
+
+  if (!KEY)
+    return (
+      <div className="grid h-full place-items-center bg-neutral-50 px-8 text-center">
+        <div className="max-w-sm text-sm text-neutral-600">
+          <p className="font-medium text-neutral-800">Falta la llave de Google Maps</p>
+          <p className="mt-2 text-[13px] leading-relaxed">
+            En la consola de GCP (el proyecto de Places): habilita{" "}
+            <b>Maps JavaScript API</b>, crea una API key restringida por referrer a{" "}
+            <code className="rounded bg-neutral-100 px-1">admin.propia.dev</code> y{" "}
+            <code className="rounded bg-neutral-100 px-1">localhost:3000</code>, y ponla en{" "}
+            <code className="rounded bg-neutral-100 px-1">.env.local</code> como{" "}
+            <code className="rounded bg-neutral-100 px-1">NEXT_PUBLIC_GOOGLE_MAPS_KEY</code>.
+          </p>
+        </div>
+      </div>
+    );
 
   return (
     <div className="relative h-full w-full">
       <div ref={host} className="h-full w-full" />
-      {failures > 3 ? (
-        <div className="pointer-events-none absolute right-3 top-3 z-[500] rounded-lg bg-amber-50/95 px-2.5 py-1.5 text-[11px] text-amber-800 shadow-sm ring-1 ring-amber-200">
-          El mapa base viene incompleto (OpenStreetMap está limitando). Los polígonos
-          y los pins son correctos.
+      {authFail ? (
+        <div className="absolute inset-0 grid place-items-center bg-neutral-50/95 px-8 text-center">
+          <p className="max-w-sm text-sm text-neutral-600">
+            Google rechazó la llave (inválida, sin <b>Maps JavaScript API</b> habilitada, o el
+            referrer no está permitido). Revisa la key en la consola de GCP.
+          </p>
         </div>
       ) : null}
     </div>

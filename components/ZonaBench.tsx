@@ -6,7 +6,7 @@ import { useRef, useState, useTransition } from "react";
 import { crearZona } from "@/app/actions";
 import type { CandidateSet, Failure } from "@/lib/zonas";
 
-// Leaflet touches window on import, so the map is client-only.
+// The Google Maps SDK touches window on import, so the map is client-only.
 const ZonaMap = dynamic(() => import("@/components/ZonaMap").then((m) => m.ZonaMap), {
   ssr: false,
   loading: () => (
@@ -199,7 +199,7 @@ export function ZonaBench({
                     onToggle={toggle}
                   />
                 )}
-                <div className="pointer-events-none absolute bottom-3 left-3 z-[500] rounded-lg bg-white/90 px-2.5 py-1.5 text-[11px] leading-relaxed text-neutral-600 shadow-sm ring-1 ring-black/[0.05] backdrop-blur">
+                <div className="pointer-events-none absolute left-3 top-3 z-[500] rounded-lg bg-white/90 px-2.5 py-1.5 text-[11px] leading-relaxed text-neutral-600 shadow-sm ring-1 ring-black/[0.05] backdrop-blur">
                   <span className="mr-1 inline-block h-2 w-2 rounded-full bg-rose-600 align-middle" />
                   propiedad sin zona
                   <span className="mx-1.5 text-neutral-300">|</span>
