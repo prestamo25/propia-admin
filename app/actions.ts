@@ -219,3 +219,42 @@ export async function crearZona(
   const res = (data ?? {}) as { propiedades_movidas?: number; key?: string };
   return { movidas: res.propiedades_movidas ?? 0, key: res.key };
 }
+
+// Create/update a HAND-DRAWN zone — for places brokers name but INEGI has no
+// polygon for (Bello Horizonte, Tlaxcalancingo). The ring is the person's own
+// judgment of the boundary; nothing is extracted from the basemap.
+export async function crearZonaDibujada(
+  nombre: string,
+  estado: string,
+  ring: [number, number][],
+): Promise<Result & { movidas?: number; key?: string }> {
+  const role = await getRole();
+  if (!role || !roleCan(role, "dev")) return { error: "No autorizado." };
+
+  const clean = nombre.trim();
+  if (clean.length < 3) return { error: "Ponle un nombre a la zona." };
+  if (!Array.isArray(ring) || ring.length < 4)
+    return { error: "El dibujo necesita al menos tres vértices." };
+  if (!ring.every((p) => Array.isArray(p) && Number.isFinite(p[0]) && Number.isFinite(p[1])))
+    return { error: "El dibujo trae coordenadas inválidas." };
+
+  const slug = clean
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  if (!slug) return { error: "Ese nombre no produce una clave válida." };
+
+  const sb = supabaseAdmin();
+  const { data, error } = await sb.rpc("admin_create_zona_drawn", {
+    p_key: `zona-${slug}`,
+    p_nombre: clean,
+    p_estado: estado,
+    p_geojson: { type: "Polygon", coordinates: [ring] },
+  });
+  if (error) return { error: error.message };
+  revalidatePath("/zonas");
+  const res = (data ?? {}) as { propiedades_movidas?: number; key?: string };
+  return { movidas: res.propiedades_movidas ?? 0, key: res.key };
+}

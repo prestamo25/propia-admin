@@ -3,8 +3,9 @@
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useRef, useState, useTransition } from "react";
-import { crearZona } from "@/app/actions";
+import { crearZona, crearZonaDibujada } from "@/app/actions";
 import type { CandidateSet, Failure } from "@/lib/zonas";
+import type { Ring } from "@/components/ZonaMap";
 
 // The Google Maps SDK touches window on import, so the map is client-only.
 const ZonaMap = dynamic(() => import("@/components/ZonaMap").then((m) => m.ZonaMap), {
@@ -37,6 +38,8 @@ export function ZonaBench({
   const [nombre, setNombre] = useState(initial?.failure.nombre ?? "");
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [drawing, setDrawing] = useState(false);
+  const [ring, setRing] = useState<Ring | null>(null);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
   // Clicking quickly through the queue fires overlapping fetches; only the
@@ -49,6 +52,8 @@ export function ZonaBench({
     setSel(f);
     setNombre(f.nombre);
     setPicked([]);
+    setDrawing(false);
+    setRing(null);
     setMsg(null);
     setLoading(true);
     try {
@@ -78,9 +83,11 @@ export function ZonaBench({
     setPicked((p) => (p.includes(key) ? p.filter((k) => k !== key) : [...p, key]));
 
   function save() {
-    if (!sel || !picked.length) return;
+    if (!sel || (!ring && !picked.length)) return;
     startTransition(async () => {
-      const res = await crearZona(nombre, sel.estado, picked);
+      const res = ring
+        ? await crearZonaDibujada(nombre, sel.estado, ring)
+        : await crearZona(nombre, sel.estado, picked);
       if (res.error) setMsg({ ok: false, text: res.error });
       else {
         setMsg({
@@ -88,6 +95,8 @@ export function ZonaBench({
           text: `Zona creada · ${res.movidas} propiedad${res.movidas === 1 ? "" : "es"} re-asignada${res.movidas === 1 ? "" : "s"}.`,
         });
         setPicked([]);
+        setRing(null);
+        setDrawing(false);
         // Re-render the server component: the resolved name leaves the queue
         // and the header tallies move, without a manual reload.
         router.refresh();
@@ -196,9 +205,31 @@ export function ZonaBench({
                     pins={set?.pins ?? []}
                     candidatos={cands}
                     picked={picked}
+                    drawing={drawing && !ring}
+                    hasDrawn={!!ring}
                     onToggle={toggle}
+                    onDrawn={setRing}
                   />
                 )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (drawing || ring) {
+                      setDrawing(false);
+                      setRing(null);
+                    } else {
+                      setDrawing(true);
+                      setPicked([]);
+                    }
+                  }}
+                  className={`absolute right-3 top-3 z-[500] rounded-lg px-3 py-1.5 text-xs font-semibold shadow-sm ring-1 transition ${
+                    drawing || ring
+                      ? "bg-rose-600 text-white ring-rose-600 hover:bg-rose-700"
+                      : "bg-white/95 text-neutral-700 ring-black/[0.06] backdrop-blur hover:bg-white"
+                  }`}
+                >
+                  {ring ? "Borrar dibujo" : drawing ? "Cancelar dibujo" : "✏️ Dibujar zona"}
+                </button>
                 <div className="pointer-events-none absolute left-3 top-3 z-[500] rounded-lg bg-white/90 px-2.5 py-1.5 text-[11px] leading-relaxed text-neutral-600 shadow-sm ring-1 ring-black/[0.05] backdrop-blur">
                   <span className="mr-1 inline-block h-2 w-2 rounded-full bg-rose-600 align-middle" />
                   propiedad sin zona
@@ -263,16 +294,28 @@ export function ZonaBench({
               />
               <button
                 onClick={save}
-                disabled={pending || !picked.length || nombre.trim().length < 3}
+                disabled={pending || (!ring && !picked.length) || nombre.trim().length < 3}
                 className="rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:opacity-90 disabled:opacity-40"
               >
                 {pending
                   ? "Creando…"
-                  : `Crear zona${picked.length ? ` · ${picked.length} polígono${picked.length === 1 ? "" : "s"}` : ""}`}
+                  : ring
+                    ? "Crear zona · dibujada"
+                    : `Crear zona${picked.length ? ` · ${picked.length} polígono${picked.length === 1 ? "" : "s"}` : ""}`}
               </button>
               {msg ? (
                 <span className={`text-sm ${msg.ok ? "text-emerald-700" : "text-rose-600"}`}>
                   {msg.text}
+                </span>
+              ) : ring ? (
+                <span className="text-xs text-neutral-500">
+                  Dibujo listo — arrastra los vértices para afinarlo, o bórralo y vuelve a
+                  empezar.
+                </span>
+              ) : drawing ? (
+                <span className="text-xs text-neutral-500">
+                  Haz click en el mapa para poner vértices; cierra en el primero para
+                  terminar.
                 </span>
               ) : picked.length ? (
                 <span className="text-xs text-neutral-500">

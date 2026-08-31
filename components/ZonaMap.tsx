@@ -10,12 +10,18 @@ import type { Candidate } from "@/lib/zonas";
 // about STORING Places data in our matching engine; drawing our own INEGI
 // polygons on top of a Google map is the permitted direction.
 //
+// Drawing is implemented by hand (click = vertex, click the first vertex or
+// double-click = close): Google REMOVED DrawingManager from the JS API as of
+// v3.65, so the "drawing" library is an empty husk.
+//
 // Needs a browser key (Maps JavaScript API) in NEXT_PUBLIC_GOOGLE_MAPS_KEY —
 // separate from the app's Places key, which lives server-side in the
 // places-proxy Edge Function and must stay there. Lock this one by HTTP
 // referrer to admin.propia.dev + localhost:3000.
 
 const KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY ?? "";
+
+export type Ring = [number, number][]; // [lng, lat], first point repeated last
 
 const LOW = new Set(["de", "del", "la", "las", "los", "y", "a", "en", "el"]);
 const titleCase = (s: string) =>
@@ -31,21 +37,43 @@ const STYLE = {
   rest: { stroke: "#475569", fill: "#64748b", w: 1.4, op: 0.09 },
 };
 
+const DRAW_STYLE = {
+  strokeColor: "#1c4588",
+  strokeWeight: 2.5,
+  fillColor: "#1c4588",
+  fillOpacity: 0.15,
+};
+
 export function ZonaMap({
   pins,
   candidatos,
   picked,
+  drawing,
+  hasDrawn,
   onToggle,
+  onDrawn,
 }: {
   pins: [number, number][];
   candidatos: Candidate[];
   picked: string[];
+  /** true = click-to-place-vertices mode is armed */
+  drawing: boolean;
+  /** true while the bench is holding a finished drawing */
+  hasDrawn: boolean;
   onToggle: (key: string) => void;
+  /** fires with the closed ring when a polygon is finished or vertex-edited */
+  onDrawn: (ring: Ring) => void;
 }) {
   const host = useRef<HTMLDivElement>(null);
   const map = useRef<google.maps.Map | null>(null);
   const info = useRef<google.maps.InfoWindow | null>(null);
   const markers = useRef<google.maps.Marker[]>([]);
+  // in-progress drawing
+  const draft = useRef<google.maps.LatLng[]>([]);
+  const draftLine = useRef<google.maps.Polyline | null>(null);
+  const draftDot = useRef<google.maps.Marker | null>(null);
+  // finished drawing (editable)
+  const drawnPoly = useRef<google.maps.Polygon | null>(null);
   const [ready, setReady] = useState(false);
   const [authFail, setAuthFail] = useState(false);
 
@@ -58,6 +86,46 @@ export function ZonaMap({
   useEffect(() => {
     pickedRef.current = picked;
   }, [picked]);
+  const onDrawnRef = useRef(onDrawn);
+  useEffect(() => {
+    onDrawnRef.current = onDrawn;
+  }, [onDrawn]);
+  const drawingRef = useRef(drawing);
+  useEffect(() => {
+    drawingRef.current = drawing;
+  }, [drawing]);
+
+  function clearDraft() {
+    draft.current = [];
+    draftLine.current?.setMap(null);
+    draftLine.current = null;
+    draftDot.current?.setMap(null);
+    draftDot.current = null;
+  }
+  function clearDrawn() {
+    drawnPoly.current?.setMap(null);
+    drawnPoly.current = null;
+  }
+
+  function finishDraft(m: google.maps.Map) {
+    if (draft.current.length < 3) return;
+    const path = [...draft.current];
+    clearDraft();
+    const poly = new google.maps.Polygon({ map: m, paths: path, editable: true, ...DRAW_STYLE });
+    drawnPoly.current = poly;
+    const report = () => {
+      const r = poly
+        .getPath()
+        .getArray()
+        .map((ll) => [ll.lng(), ll.lat()] as [number, number]);
+      if (r.length) r.push(r[0]);
+      onDrawnRef.current(r);
+    };
+    const p = poly.getPath();
+    for (const ev of ["set_at", "insert_at", "remove_at"] as const)
+      p.addListener(ev, report);
+    report();
+  }
 
   // init once
   useEffect(() => {
@@ -94,13 +162,19 @@ export function ZonaMap({
             strokeWeight: s.w,
             fillColor: s.fill,
             fillOpacity: s.op,
-            cursor: "pointer",
+            cursor: drawingRef.current ? "crosshair" : "pointer",
           };
         });
         m.data.addListener("click", (e: google.maps.Data.MouseEvent) => {
+          // while drawing, a click on a polygon is a vertex, not a toggle
+          if (drawingRef.current) {
+            if (e.latLng) addVertex(m, e.latLng);
+            return;
+          }
           toggle.current(e.feature.getProperty("key") as string);
         });
         m.data.addListener("mouseover", (e: google.maps.Data.MouseEvent) => {
+          if (drawingRef.current) return;
           const nombre = titleCase(e.feature.getProperty("nombre") as string);
           const mun = e.feature.getProperty("municipio") as string;
           const n = e.feature.getProperty("pins_dentro") as number;
@@ -113,17 +187,73 @@ export function ZonaMap({
         });
         m.data.addListener("mouseout", () => info.current?.close());
 
+        // manual drawing: click = vertex; first-vertex click or dblclick = close
+        m.addListener("click", (e: google.maps.MapMouseEvent) => {
+          if (drawingRef.current && e.latLng) addVertex(m, e.latLng);
+        });
+        m.addListener("dblclick", () => {
+          if (drawingRef.current) finishDraft(m);
+        });
+
         map.current = m;
         setReady(true);
       })
       .catch(() => setAuthFail(true));
+
+    function addVertex(m: google.maps.Map, ll: google.maps.LatLng) {
+      draft.current.push(ll);
+      if (!draftLine.current)
+        draftLine.current = new google.maps.Polyline({
+          map: m,
+          path: [],
+          strokeColor: DRAW_STYLE.strokeColor,
+          strokeWeight: 2,
+        });
+      draftLine.current.setPath(draft.current);
+      if (!draftDot.current) {
+        // the first vertex is the close button
+        draftDot.current = new google.maps.Marker({
+          map: m,
+          position: ll,
+          title: "Cerrar el polígono",
+          icon: {
+            path: google.maps.SymbolPath.CIRCLE,
+            scale: 6,
+            fillColor: "#ffffff",
+            fillOpacity: 1,
+            strokeColor: DRAW_STYLE.strokeColor,
+            strokeWeight: 2.5,
+          },
+        });
+        draftDot.current.addListener("click", () => finishDraft(m));
+      }
+    }
 
     return () => {
       cancelled = true;
       map.current = null;
       el.innerHTML = "";
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // arm/disarm drawing: cursor + double-click zoom; leaving both modes clears
+  useEffect(() => {
+    const m = map.current;
+    if (!m || !ready) return;
+    m.setOptions({
+      draggableCursor: drawing ? "crosshair" : null,
+      disableDoubleClickZoom: drawing,
+    });
+    if (drawing) {
+      clearDrawn(); // starting over
+      info.current?.close();
+    }
+    if (!drawing && !hasDrawn) {
+      clearDraft();
+      clearDrawn();
+    }
+  }, [drawing, hasDrawn, ready]);
 
   // data: polygons + pins (rebuilt when the selection target changes)
   useEffect(() => {
@@ -131,6 +261,8 @@ export function ZonaMap({
     if (!m || !ready) return;
 
     m.data.forEach((f) => m.data.remove(f));
+    clearDraft();
+    clearDrawn();
     for (const c of candidatos) {
       m.data.addGeoJson({
         type: "Feature",
