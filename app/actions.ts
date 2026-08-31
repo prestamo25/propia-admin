@@ -2,6 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { getRole } from "@/lib/session";
+import { roleCan } from "@/lib/auth";
 import {
   CANONICAL_PAIRS,
   RESCUE_OTP,
@@ -171,4 +173,49 @@ export async function removeRescuePair(phone10: string): Promise<Result> {
   } catch (e) {
     return { error: e instanceof Error ? e.message : String(e) };
   }
+}
+
+// ---------------------------------------------------------------------------
+// Zonas — Propia's editorial layer over the INEGI catalog.
+// ---------------------------------------------------------------------------
+
+// Create or update a macro-zone from an explicit member list. Geometry is the
+// union of the members, so re-running with an edited list rebuilds the shape.
+// Returns how many listings the change re-homed, which is the whole point of
+// the exercise and worth showing back to whoever pressed the button.
+export async function crearZona(
+  nombre: string,
+  estado: string,
+  miembros: string[],
+): Promise<Result & { movidas?: number; key?: string }> {
+  // The middleware only proves *a* session exists; it knows nothing about
+  // roles. An action that writes to production matching enforces its own
+  // gate, same tier as the page that hosts it.
+  const role = await getRole();
+  if (!role || !roleCan(role, "dev")) return { error: "No autorizado." };
+
+  const clean = nombre.trim();
+  if (clean.length < 3) return { error: "Ponle un nombre a la zona." };
+  if (!miembros.length) return { error: "Selecciona al menos un polígono." };
+
+  // zona-<slug>: accent-stripped, non-alphanumerics collapsed to hyphens.
+  const slug = clean
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  if (!slug) return { error: "Ese nombre no produce una clave válida." };
+
+  const sb = supabaseAdmin();
+  const { data, error } = await sb.rpc("admin_create_zona", {
+    p_key: `zona-${slug}`,
+    p_nombre: clean,
+    p_estado: estado,
+    p_miembros: miembros,
+  });
+  if (error) return { error: error.message };
+  revalidatePath("/zonas");
+  const res = (data ?? {}) as { propiedades_movidas?: number; key?: string };
+  return { movidas: res.propiedades_movidas ?? 0, key: res.key };
 }

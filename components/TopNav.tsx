@@ -15,7 +15,8 @@ type NavKey =
   | "salidas"
   | "whatsapp"
   | "almacenamiento"
-  | "lifecycle";
+  | "lifecycle"
+  | "zonas";
 
 export async function TopNav({ active }: { active: NavKey }) {
   const [openReports, pendingUsers, role] = await Promise.all([
@@ -31,7 +32,7 @@ export async function TopNav({ active }: { active: NavKey }) {
         ? { label: "Mariana", cls: "bg-sky-100 text-sky-700" }
         : { label: "Admin", cls: "bg-neutral-100 text-neutral-500" };
 
-  const devActive = ["whatsapp", "almacenamiento", "lifecycle"].includes(active);
+  const devActive = ["whatsapp", "almacenamiento", "lifecycle", "zonas"].includes(active);
 
   const menuItem = (href: string, label: string, key: NavKey) => (
     <Link
@@ -137,6 +138,7 @@ export async function TopNav({ active }: { active: NavKey }) {
                       {menuItem("/whatsapp", "WhatsApp", "whatsapp")}
                       {menuItem("/almacenamiento", "Almacenamiento", "almacenamiento")}
                       {menuItem("/lifecycle", "Ciclo de vida", "lifecycle")}
+                      {menuItem("/zonas", "Zonas", "zonas")}
                     </div>
                   </div>
                 </div>
