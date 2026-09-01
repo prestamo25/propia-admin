@@ -14,13 +14,16 @@ export const PROFILE_TYPE_LABEL: Record<string, string> = {
   educacion: "Educación",
   otros: "Otros",
   cliente: "Cliente",
+  invitado: "Invitado",
 };
 
-export type Tier = "asesor" | "servicios" | "cliente";
+export type Tier = "asesor" | "servicios" | "cliente" | "invitado";
 
 export function tierOf(profileType: string | null | undefined): Tier {
   if (!profileType || profileType === "asesor") return "asesor";
   if (profileType === "cliente") return "cliente";
+  // Event-goers (back per Franz 2026-09-01): eventos + servicios in the app.
+  if (profileType === "invitado") return "invitado";
   return "servicios";
 }
 

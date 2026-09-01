@@ -54,7 +54,7 @@ export function BrokerTable({ brokers }: { brokers: BrokerRow[] }) {
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
   const tierCounts = useMemo(() => {
-    const c = { todos: brokers.length, asesor: 0, servicios: 0, cliente: 0 };
+    const c = { todos: brokers.length, asesor: 0, servicios: 0, cliente: 0, invitado: 0 };
     for (const b of brokers) c[tierOf(b.profile_type)]++;
     return c;
   }, [brokers]);
@@ -101,6 +101,7 @@ export function BrokerTable({ brokers }: { brokers: BrokerRow[] }) {
             ["asesor", "Asesores"],
             ["servicios", "Servicios"],
             ["cliente", "Clientes"],
+            ["invitado", "Invitados"],
           ] as const
         ).map(([key, label]) => (
           <button
