@@ -5,8 +5,9 @@ import { approveUser, approveUserAs, rejectUser } from "@/app/actions";
 import { PROFILE_TYPE_LABEL, tierOf } from "@/lib/profileTypes";
 
 // Common reasons, one tap. «Otro» opens free text — the reason is what the
-// applicant will be shown (in the app AND on WhatsApp), so it must be a
-// sentence a person can act on.
+// applicant will be shown on their pending screen, so it must be a sentence
+// a person can act on. (The WhatsApp notice exists but is switched off —
+// Franz 2026-09-03, «only app now»; see applied/approvals-review-2026-09-03.sql.)
 const REASONS = [
   "No pudimos verificar que seas parte del sector inmobiliario",
   "Los documentos no son legibles o no corresponden",
@@ -78,7 +79,7 @@ export function ApproveButton({
 
   function approve() {
     const ok = window.confirm(
-      `¿Aprobar a ${name ?? "esta cuenta"}?\n\nTendrá acceso inmediato — su teléfono se actualiza al instante y le avisamos por WhatsApp.`,
+      `¿Aprobar a ${name ?? "esta cuenta"}?\n\nTendrá acceso inmediato — su teléfono se actualiza al instante.`,
     );
     if (!ok) return;
     startTransition(async () => {
@@ -99,7 +100,7 @@ export function ApproveButton({
             ? "Verá el inventario de su asesor; no publica ni aparece en el directorio."
             : "Tendrá la app completa de broker.";
     const ok = window.confirm(
-      `¿Aprobar a ${name ?? "esta cuenta"} como ${label}?\n\n${effect} Le avisamos por WhatsApp.`,
+      `¿Aprobar a ${name ?? "esta cuenta"} como ${label}?\n\n${effect}`,
     );
     if (!ok) return;
     startTransition(async () => {
@@ -122,7 +123,7 @@ export function ApproveButton({
       <div className="w-full min-w-0 rounded-xl border border-rose-200 bg-rose-50/50 p-3 sm:w-80">
         <p className="text-xs font-medium text-neutral-700">
           Motivo del rechazo
-          <span className="font-normal text-neutral-500"> · lo verá {first} en la app y por WhatsApp</span>
+          <span className="font-normal text-neutral-500"> · lo verá {first} en la app</span>
         </p>
         <div className="mt-2 space-y-1">
           {REASONS.map((r) => (
