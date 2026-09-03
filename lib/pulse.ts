@@ -42,7 +42,7 @@ export type Pulse = {
 
 // CDMX is UTC-6 with no DST — a fixed offset is correct and cheap.
 const CDMX_OFFSET = 6 * 3600000;
-function cdmxMidnight(daysAgo = 0): number {
+export function cdmxMidnight(daysAgo = 0): number {
   const n = new Date(Date.now() - CDMX_OFFSET);
   const utc = Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), n.getUTCDate() - daysAgo);
   return utc + CDMX_OFFSET;

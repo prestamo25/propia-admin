@@ -1,6 +1,8 @@
 import Link from "next/link";
-import { fetchInicio } from "@/lib/inicio";
+import { fetchInicio, type WeekMetric } from "@/lib/inicio";
 import { fetchPulse } from "@/lib/pulse";
+import { fetchServicios, type ServiceItem } from "@/lib/servicios";
+import { fmtWhen } from "@/lib/eventos";
 import { TopNav } from "@/components/TopNav";
 import { LivePulse } from "@/components/LivePulse";
 import { getRole } from "@/lib/session";
@@ -50,6 +52,19 @@ const SECTIONS: Section[] = [
       <svg {...S}>
         <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
         <polyline points="22 4 12 14.01 9 11.01" />
+      </svg>
+    ),
+  },
+  {
+    href: "/eventos",
+    title: "Eventos",
+    desc: "Todos los eventos, participantes y quién escaneó",
+    icon: (
+      <svg {...S}>
+        <rect x="3" y="4" width="18" height="18" rx="2" />
+        <line x1="16" y1="2" x2="16" y2="6" />
+        <line x1="8" y1="2" x2="8" y2="6" />
+        <line x1="3" y1="10" x2="21" y2="10" />
       </svg>
     ),
   },
@@ -155,6 +170,66 @@ const SECTIONS: Section[] = [
   },
 ];
 
+const LEVEL_DOT: Record<ServiceItem["level"], string> = {
+  ok: "bg-emerald-500",
+  warn: "bg-amber-500",
+  down: "bg-rose-500",
+  unknown: "bg-neutral-300",
+};
+
+// The money and capacity behind the network — Twilio credit for OTPs, Claude
+// spend for the cerebro, database size. Levels turn amber/red on thresholds
+// set in lib/servicios.ts.
+function ServiciosStrip({ items }: { items: ServiceItem[] }) {
+  return (
+    <section className="mt-8">
+      <h2 className="text-sm font-semibold text-neutral-900">Servicios</h2>
+      <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+        {items.map((it) => {
+          const inner = (
+            <>
+              <div className="flex items-center gap-2 text-xs text-neutral-500">
+                <span className={`h-2 w-2 rounded-full ${LEVEL_DOT[it.level]}`} />
+                {it.label}
+              </div>
+              <div className={`mt-1.5 text-lg font-semibold tabular-nums ${it.level === "down" ? "text-rose-700" : it.level === "warn" ? "text-amber-700" : it.level === "unknown" ? "text-neutral-400" : "text-neutral-900"}`}>
+                {it.value}
+              </div>
+              <div className="mt-0.5 text-xs text-neutral-500">{it.detail}</div>
+            </>
+          );
+          const cls = "block rounded-2xl border border-black/[0.05] bg-white p-4 shadow-soft transition hover:-translate-y-0.5 hover:shadow-lift";
+          return it.href ? (
+            <a key={it.key} href={it.href} target="_blank" rel="noreferrer" className={cls}>{inner}</a>
+          ) : (
+            <div key={it.key} className={cls}>{inner}</div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function Delta7({ m }: { m: WeekMetric }) {
+  const diff = m.now - m.prev;
+  const pct = m.prev > 0 ? Math.round((diff / m.prev) * 100) : null;
+  const tone = diff > 0 ? "text-emerald-700" : diff < 0 ? "text-rose-700" : "text-neutral-400";
+  const body = (
+    <>
+      <div className="text-xs text-neutral-500">{m.label}</div>
+      <div className="mt-1 flex items-baseline gap-2">
+        <span className="text-2xl font-semibold tabular-nums text-neutral-900">{m.now}</span>
+        <span className={`text-xs font-medium tabular-nums ${tone}`} title="Contra los 7 días anteriores">
+          {diff > 0 ? "▲" : diff < 0 ? "▼" : "="} {pct != null ? `${Math.abs(pct)}%` : diff === 0 ? "" : "nuevo"}
+        </span>
+      </div>
+      <div className="text-[11px] text-neutral-400">7 días antes: {m.prev}</div>
+    </>
+  );
+  const cls = "block rounded-2xl border border-black/[0.05] bg-white p-4 shadow-soft";
+  return m.href ? <Link href={m.href} className={`${cls} transition hover:-translate-y-0.5 hover:shadow-lift`}>{body}</Link> : <div className={cls}>{body}</div>;
+}
+
 function Total({ label, value }: { label: string; value: number }) {
   return (
     <div className="px-2 py-1">
@@ -173,8 +248,9 @@ export default async function InicioPage() {
 
   let data;
   let pulse;
+  let servicios: ServiceItem[] = [];
   try {
-    [data, pulse] = await Promise.all([fetchInicio(), fetchPulse()]);
+    [data, pulse, servicios] = await Promise.all([fetchInicio(), fetchPulse(), fetchServicios()]);
   } catch (e) {
     return (
       <div className="min-h-screen">
@@ -212,6 +288,74 @@ export default async function InicioPage() {
         {/* LIVE operations — polls /api/pulse every 20 s, seeded server-side
             so the dashboard never shows a loading state. */}
         <LivePulse initial={pulse} />
+
+        {/* Today's events + what needs a hand — only rendered when there is
+            something to show, so a quiet day stays quiet. */}
+        {data.eventsToday.length > 0 || data.tomorrowRegistrations > 0 || data.receiptsWaiting > 0 || data.emptyUpcoming.length > 0 ? (
+          <section className="mt-8 grid grid-cols-1 gap-3 lg:grid-cols-2">
+            {data.eventsToday.length > 0 || data.tomorrowRegistrations > 0 ? (
+              <div className="rounded-2xl border border-black/[0.05] bg-white p-5 shadow-soft">
+                <div className="flex items-baseline justify-between">
+                  <h2 className="text-sm font-semibold text-neutral-900">Eventos de hoy</h2>
+                  <Link href="/eventos" className="text-xs font-medium text-brand hover:underline">Ver todos</Link>
+                </div>
+                {data.eventsToday.length === 0 ? (
+                  <p className="mt-3 text-sm text-neutral-500">Hoy no hay eventos.</p>
+                ) : (
+                  <ul className="mt-3 divide-y divide-black/[0.04]">
+                    {data.eventsToday.map((e) => (
+                      <li key={e.id} className="flex items-center gap-3 py-2.5">
+                        <Link href={`/eventos/${e.id}`} className="min-w-0 flex-1 hover:text-brand">
+                          <span className="block truncate text-sm font-medium text-neutral-900">{e.title}</span>
+                          <span className="block text-xs text-neutral-500">
+                            {fmtWhen(e.start_at, e.end_at)}
+                            {e.visibility === "private" ? " · privado" : ""}
+                          </span>
+                        </Link>
+                        <span className="shrink-0 text-sm tabular-nums">
+                          <span className="font-semibold text-emerald-700">{e.attended}</span>
+                          <span className="text-neutral-400"> / {e.registered} inscritos</span>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {data.tomorrowRegistrations > 0 ? (
+                  <p className="mt-3 text-xs text-neutral-500">Mañana: {data.tomorrowRegistrations} inscritos en total.</p>
+                ) : null}
+              </div>
+            ) : null}
+            {data.receiptsWaiting > 0 || data.emptyUpcoming.length > 0 ? (
+              <div className="rounded-2xl border border-black/[0.05] bg-white p-5 shadow-soft">
+                <h2 className="text-sm font-semibold text-neutral-900">Necesita una mano</h2>
+                <ul className="mt-3 space-y-2 text-sm">
+                  {data.receiptsWaiting > 0 ? (
+                    <li className="flex items-center gap-2 text-neutral-800">
+                      <span className="h-2 w-2 shrink-0 rounded-full bg-amber-500" />
+                      {data.receiptsWaiting === 1 ? "1 comprobante de pago espera aprobación del organizador" : `${data.receiptsWaiting} comprobantes de pago esperan aprobación de sus organizadores`}
+                    </li>
+                  ) : null}
+                  {data.emptyUpcoming.map((e) => (
+                    <li key={e.id} className="flex items-center gap-2 text-neutral-800">
+                      <span className="h-2 w-2 shrink-0 rounded-full bg-neutral-300" />
+                      <Link href={`/eventos/${e.id}`} className="min-w-0 truncate hover:text-brand">«{e.title}»</Link>
+                      <span className="shrink-0 text-xs text-neutral-500">{fmtWhen(e.start_at, null)} · sin inscritos</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+          </section>
+        ) : null}
+
+        <section className="mt-8">
+          <h2 className="text-sm font-semibold text-neutral-900">Últimos 7 días</h2>
+          <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+            {data.week.map((m) => <Delta7 key={m.label} m={m} />)}
+          </div>
+        </section>
+
+        <ServiciosStrip items={servicios} />
 
         {/* standing totals of the whole network */}
         <section className="mt-8 grid grid-cols-2 gap-3 rounded-2xl border border-black/[0.05] bg-white/70 p-4 shadow-soft sm:grid-cols-4">
