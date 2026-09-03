@@ -13,6 +13,12 @@
 }
 
 @theme {
+  /* Header tab-row folding tiers — see components/TopNav.tsx. rem like the
+     defaults (Tailwind sorts breakpoints, so units must match). */
+  --breakpoint-navsm: 55.625rem; /* 890px */
+  --breakpoint-navmd: 62.5rem; /* 1000px */
+  --breakpoint-navlg: 77.5rem; /* 1240px */
+
   --color-brand: #1c4588;
   --color-brand-dark: #14315f;
   --color-brand-light: #eef2fa;
