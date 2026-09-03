@@ -8,6 +8,7 @@ type NavKey =
   | "inicio"
   | "brokers"
   | "aprobaciones"
+  | "eventos"
   | "alta"
   | "envivo"
   | "panorama"
@@ -101,6 +102,7 @@ export async function TopNav({ active }: { active: NavKey }) {
             {tab("/", "Inicio", "inicio")}
             {tab("/brokers", "Miembros", "brokers")}
             {tab("/aprobaciones", "Aprobaciones", "aprobaciones", pendingUsers)}
+            {tab("/eventos", "Eventos", "eventos")}
             {tab("/en-vivo", "En vivo", "envivo")}
             {tab("/panorama", "Panorama", "panorama")}
             {tab("/reportes", "Reportes", "reportes", openReports)}
