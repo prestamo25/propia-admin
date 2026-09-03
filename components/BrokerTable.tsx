@@ -15,7 +15,7 @@ import {
   relative,
 } from "@/lib/format";
 
-type SortKey = "name" | "inventory" | "created_at" | "last_active";
+type SortKey = "name" | "inventory" | "requests" | "contacts" | "events" | "sends" | "created_at" | "last_active";
 type SortDir = "asc" | "desc";
 
 const STATUS: Record<string, { label: string; dot: string; cls: string }> = {
@@ -71,6 +71,14 @@ export function BrokerTable({ brokers }: { brokers: BrokerRow[] }) {
           return dir * (a.name ?? "").localeCompare(b.name ?? "", "es");
         case "inventory":
           return dir * (a.inventory - b.inventory);
+        case "requests":
+          return dir * (a.requests - b.requests);
+        case "contacts":
+          return dir * (a.contacts - b.contacts);
+        case "events":
+          return dir * (a.events_attended - b.events_attended);
+        case "sends":
+          return dir * (a.sends - b.sends || a.opens - b.opens);
         case "created_at":
           return dir * ((a.created_at ?? "") < (b.created_at ?? "") ? -1 : 1);
         case "last_active":
@@ -204,6 +212,9 @@ export function BrokerTable({ brokers }: { brokers: BrokerRow[] }) {
                 </div>
                 <div className="mt-0.5 flex items-center gap-2 text-xs text-neutral-400">
                   <span className="font-mono">{b.phone ?? "—"}</span>
+                  <span className="block text-[11px] tabular-nums text-neutral-400">
+                    {b.requests} req · {b.contacts} contactos · {b.events_attended} eventos · {b.sends} envíos
+                  </span>
                   <span>·</span>
                   <span className="truncate">{act.label}</span>
                 </div>
@@ -242,23 +253,38 @@ export function BrokerTable({ brokers }: { brokers: BrokerRow[] }) {
         <table className="w-full border-separate border-spacing-0 text-left text-sm">
           <thead className="sticky top-0 z-10 bg-neutral-50/80 backdrop-blur">
             <tr className="text-xs uppercase tracking-wide text-neutral-500">
+              {/* Every other column carries a width, so the name column is the
+                  one that flexes — otherwise it swallows the slack and pushes
+                  the numbers off a laptop screen. */}
               <Th sortKey="name" active={sortKey} dir={sortDir} onSort={toggleSort}>
                 Miembro
               </Th>
-              <Th>Teléfono</Th>
-              <Th>Estados</Th>
-              <Th>Estatus</Th>
-              <Th sortKey="inventory" active={sortKey} dir={sortDir} onSort={toggleSort} align="right">
+              <Th className="w-28">Teléfono</Th>
+              <Th className="hidden 2xl:table-cell">Estados</Th>
+              <Th className="w-28">Estatus</Th>
+              <Th sortKey="inventory" active={sortKey} dir={sortDir} onSort={toggleSort} align="right" className="w-24">
                 Inventario
               </Th>
-              <Th align="right">MB</Th>
-              <Th sortKey="created_at" active={sortKey} dir={sortDir} onSort={toggleSort}>
+              <Th sortKey="requests" active={sortKey} dir={sortDir} onSort={toggleSort} align="right" className="w-16">
+                Req.
+              </Th>
+              <Th sortKey="contacts" active={sortKey} dir={sortDir} onSort={toggleSort} align="right" className="w-24">
+                Contactos
+              </Th>
+              <Th sortKey="events" active={sortKey} dir={sortDir} onSort={toggleSort} align="right" className="w-20">
+                Eventos
+              </Th>
+              <Th sortKey="sends" active={sortKey} dir={sortDir} onSort={toggleSort} align="right" className="w-24">
+                Envíos
+              </Th>
+              <Th className="w-20">App</Th>
+              <Th sortKey="created_at" active={sortKey} dir={sortDir} onSort={toggleSort} className="hidden 2xl:table-cell">
                 Alta
               </Th>
-              <Th sortKey="last_active" active={sortKey} dir={sortDir} onSort={toggleSort}>
+              <Th sortKey="last_active" active={sortKey} dir={sortDir} onSort={toggleSort} className="w-24">
                 Actividad
               </Th>
-              <Th align="right">Acciones</Th>
+              <Th align="right" className="w-24">Acciones</Th>
               <th className="w-8 border-b border-neutral-100" />
             </tr>
           </thead>
@@ -273,7 +299,7 @@ export function BrokerTable({ brokers }: { brokers: BrokerRow[] }) {
                   onClick={() => router.push(`/broker/${b.id}`)}
                   className="group cursor-pointer border-b border-neutral-50 transition-colors last:border-0 hover:bg-neutral-50/70"
                 >
-                  <Td>
+                  <Td className="max-w-0">
                     <div className="flex items-center gap-3">
                       {b.avatar_url ? (
                         // eslint-disable-next-line @next/next/no-img-element
@@ -308,11 +334,11 @@ export function BrokerTable({ brokers }: { brokers: BrokerRow[] }) {
                     </div>
                   </Td>
                   <Td>
-                    <span className="font-mono text-xs text-neutral-600">
+                    <span className="font-mono text-[11px] text-neutral-600">
                       {b.phone ?? "—"}
                     </span>
                   </Td>
-                  <Td>
+                  <Td className="hidden 2xl:table-cell">
                     <Estados states={b.states} />
                   </Td>
                   <Td>
@@ -345,11 +371,28 @@ export function BrokerTable({ brokers }: { brokers: BrokerRow[] }) {
                     </span>
                   </Td>
                   <Td align="right">
-                    <span className="text-xs tabular-nums text-neutral-300">
-                      {b.mb_used == null ? "—" : b.mb_used.toFixed(1)}
+                    <Num value={b.requests} />
+                  </Td>
+                  <Td align="right">
+                    <Num value={b.contacts} />
+                  </Td>
+                  <Td align="right">
+                    <Num value={b.events_attended} tone="emerald" />
+                  </Td>
+                  <Td align="right">
+                    <span className="inline-flex items-baseline justify-end gap-1">
+                      <Num value={b.sends} />
+                      {b.opens > 0 ? (
+                        <span className="text-[10px] tabular-nums text-neutral-400" title="Aperturas verificadas de sus fichas">
+                          {b.opens} vistas
+                        </span>
+                      ) : null}
                     </span>
                   </Td>
                   <Td>
+                    <Platforms list={b.platforms} />
+                  </Td>
+                  <Td className="hidden 2xl:table-cell">
                     <span className="text-xs text-neutral-500">
                       {fmtDate(b.created_at)}
                     </span>
@@ -398,7 +441,7 @@ export function BrokerTable({ brokers }: { brokers: BrokerRow[] }) {
             })}
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={10} className="px-4 py-16 text-center text-sm text-neutral-400">
+                <td colSpan={14} className="px-4 py-16 text-center text-sm text-neutral-400">
                   Sin resultados.
                 </td>
               </tr>
@@ -407,6 +450,39 @@ export function BrokerTable({ brokers }: { brokers: BrokerRow[] }) {
         </table>
       </div>
     </div>
+  );
+}
+
+// A count that fades to nothing when it's zero — the eye should land on the
+// members who DO things, not on a wall of zeros.
+function Num({ value, tone }: { value: number; tone?: "emerald" }) {
+  if (value === 0) return <span className="text-xs tabular-nums text-neutral-300">0</span>;
+  return (
+    <span
+      className={`inline-block min-w-7 rounded-md px-2 py-0.5 text-center text-xs font-semibold tabular-nums ${
+        tone === "emerald" ? "bg-emerald-50 text-emerald-700" : "bg-neutral-100 text-neutral-700"
+      }`}
+    >
+      {value}
+    </span>
+  );
+}
+
+// Which app(s) the member's push registrations come from. No registration at
+// all usually means web-only, or notifications never granted.
+function Platforms({ list }: { list: string[] }) {
+  if (list.length === 0) return <span className="text-xs text-neutral-300">—</span>;
+  return (
+    <span className="inline-flex gap-1">
+      {list.map((p) => (
+        <span
+          key={p}
+          className="rounded-md bg-neutral-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-neutral-600"
+        >
+          {p === "ios" ? "iOS" : p === "android" ? "Android" : p}
+        </span>
+      ))}
+    </span>
   );
 }
 
@@ -519,6 +595,7 @@ function Th({
   active,
   dir,
   onSort,
+  className = "",
 }: {
   children: React.ReactNode;
   align?: "left" | "right";
@@ -526,14 +603,15 @@ function Th({
   active?: SortKey;
   dir?: SortDir;
   onSort?: (k: SortKey) => void;
+  className?: string;
 }) {
   const isActive = sortKey && active === sortKey;
   const sortable = sortKey && onSort;
   return (
     <th
-      className={`border-b border-neutral-100 px-4 py-3 font-medium ${
+      className={`border-b border-neutral-100 px-3 py-3 font-medium ${
         align === "right" ? "text-right" : "text-left"
-      }`}
+      } ${className}`}
     >
       {sortable ? (
         <button
@@ -557,13 +635,15 @@ function Th({
 function Td({
   children,
   align = "left",
+  className = "",
 }: {
   children: React.ReactNode;
   align?: "left" | "right";
+  className?: string;
 }) {
   return (
     <td
-      className={`px-4 py-3 align-middle ${align === "right" ? "text-right" : "text-left"}`}
+      className={`px-3 py-3 align-middle ${align === "right" ? "text-right" : "text-left"} ${className}`}
     >
       {children}
     </td>
