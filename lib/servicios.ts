@@ -83,6 +83,25 @@ async function claude(): Promise<ServiceItem> {
     const total30 = buckets.reduce((n, b) => n + cents(b), 0) / 100;
     const last7 = buckets.slice(-7).reduce((n, b) => n + cents(b), 0) / 100;
     const today = buckets.length ? cents(buckets[buckets.length - 1]) / 100 : 0;
+    const perDay = last7 / 7;
+
+    // Credits left is not in any API. ANTHROPIC_CREDITS_ANCHOR = "YYYY-MM-DD=balance"
+    // is the balance Franz read in the Console that day; spend reported for
+    // the days AFTER it comes off (the anchor day's spend was already gone
+    // from the balance he saw). Re-anchor after every top-up.
+    const anchor = (process.env.ANTHROPIC_CREDITS_ANCHOR ?? "").match(/^(\d{4}-\d{2}-\d{2})=([\d.]+)$/);
+    if (anchor) {
+      const since = buckets.filter((b) => b.starting_at.slice(0, 10) > anchor[1]).reduce((n, b) => n + cents(b), 0) / 100;
+      const remaining = Number(anchor[2]) - since;
+      const days = perDay > 0 ? Math.floor(remaining / perDay) : null;
+      const level: ServiceLevel = remaining < 5 || (days != null && days < 5) ? "down" : remaining < 20 || (days != null && days < 14) ? "warn" : "ok";
+      return {
+        ...base,
+        level,
+        value: `≈ ${usd(remaining)} de crédito`,
+        detail: `${days != null ? `~${days} días al ritmo de la semana` : "sin ritmo aún"} · hoy ${usd(today)} · 7 días ${usd(last7)} · 30 días ${usd(total30)}`,
+      };
+    }
     const level: ServiceLevel = last7 > 150 ? "warn" : "ok";
     return { ...base, level, value: `${usd(total30)} / 30 días`, detail: `hoy ${usd(today)} · últimos 7 días ${usd(last7)}` };
   } catch (e) {
