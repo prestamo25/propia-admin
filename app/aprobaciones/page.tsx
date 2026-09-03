@@ -3,7 +3,7 @@ import { TopNav } from "@/components/TopNav";
 import { ApproveButton } from "@/components/ApproveButton";
 import { requireRole } from "@/lib/session";
 import { initials, avatarColors } from "@/lib/format";
-import { profileTypeLabel, tierOf } from "@/lib/profileTypes";
+import { profileDetails, profileTypeLabel, tierOf } from "@/lib/profileTypes";
 
 export const dynamic = "force-dynamic";
 
@@ -118,6 +118,11 @@ export default async function AprobacionesPage() {
           <ul className="mt-6 space-y-3">
             {rows.map((u) => {
               const c = avatarColors(u.id);
+              // What they said they do. «Otros» carries its giro in the tag
+              // itself — that word IS the category for that bucket.
+              const details = profileDetails(u.profile_type, u.profile_data);
+              const giro = u.profile_type === "otros" ? details.find((d) => d.key === "giro") : undefined;
+              const rest = details.filter((d) => d !== giro);
               return (
                 <li
                   key={u.id}
@@ -155,6 +160,7 @@ export default async function AprobacionesPage() {
                         }`}
                       >
                         {profileTypeLabel(u.profile_type)}
+                        {giro ? ` · ${giro.value}` : ""}
                       </span>
                       {u.company ? (
                         <span className="truncate text-sm text-neutral-500">
@@ -168,6 +174,29 @@ export default async function AprobacionesPage() {
                       {u.states?.length ? <span>{u.states.join(" · ")}</span> : null}
                       <span>{fmtDate(u.created_at)}</span>
                     </div>
+                    {rest.length > 0 ? (
+                      <dl className="mt-1.5 flex flex-wrap gap-x-4 gap-y-0.5 text-xs">
+                        {rest.map((d) => (
+                          <div key={d.key} className="flex min-w-0 max-w-full gap-1">
+                            <dt className="shrink-0 text-neutral-400">{d.label}:</dt>
+                            {d.href ? (
+                              <dd className="truncate">
+                                <a
+                                  href={d.href}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-brand underline-offset-2 hover:underline"
+                                >
+                                  {d.value}
+                                </a>
+                              </dd>
+                            ) : (
+                              <dd className="min-w-0 break-words text-neutral-700">{d.value}</dd>
+                            )}
+                          </div>
+                        ))}
+                      </dl>
+                    ) : null}
                     <div className="mt-2">
                       <DocChips docs={u.docs} />
                     </div>

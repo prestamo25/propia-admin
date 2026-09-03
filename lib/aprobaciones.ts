@@ -24,6 +24,9 @@ export type PendingUser = {
   states: string[] | null;
   avatar_url: string | null;
   created_at: string;
+  // What the account said it does — the signup's extra fields (giro,
+  // descripción, sitio web, cédula…) keyed exactly as the app stores them.
+  profile_data: Record<string, unknown> | null;
   docs: PendingDoc[];
 };
 
@@ -36,7 +39,7 @@ export async function fetchPendingUsers(): Promise<PendingUser[]> {
   const rows = await pageAll<Row>(() =>
     sb
       .from("users")
-      .select("id, name, company, phone, email, states, avatar_url, created_at, profile_type, status, rejection_reason")
+      .select("id, name, company, phone, email, states, avatar_url, created_at, profile_type, status, rejection_reason, profile_data")
       .in("status", ["pending", "rejected"])
       .order("created_at", { ascending: false }),
   );
