@@ -337,7 +337,12 @@ export function LivePulse({ initial }: { initial: Pulse }) {
 
       <div className="grid gap-6 lg:grid-cols-5">
         {/* activity feed */}
-        <section className="min-w-0 rounded-2xl border border-black/[0.05] bg-white p-5 shadow-soft lg:col-span-3">
+        {/* The card stretches to the height of the column beside it (grid
+            row), so the list must FILL it and scroll inside — a fixed cap
+            left the last row clipped above a blank half-card (Franz
+            2026-09-02). On narrow screens the card stands alone, so the cap
+            comes back there. */}
+        <section className="flex min-w-0 flex-col rounded-2xl border border-black/[0.05] bg-white p-5 shadow-soft lg:col-span-3">
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-sm font-semibold text-neutral-900">Actividad en vivo</h2>
             <Link href="/en-vivo" className="text-xs font-medium text-neutral-400 transition hover:text-neutral-700">
@@ -347,7 +352,7 @@ export function LivePulse({ initial }: { initial: Pulse }) {
           {pulse.feed.length === 0 ? (
             <p className="py-8 text-center text-sm text-neutral-400">Sin actividad reciente.</p>
           ) : (
-            <ul className="scroll-slim -my-1 max-h-[340px] space-y-0 overflow-y-auto pr-2">
+            <ul className="scroll-slim -my-1 min-h-0 max-h-[340px] flex-1 space-y-0 overflow-y-auto pr-2 lg:max-h-none">
               {pulse.feed.map((f, i) => {
                 const k = KIND[f.kind];
                 const fresh = now - new Date(f.at).getTime() < 5 * 60000;
