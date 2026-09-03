@@ -46,9 +46,16 @@ function statusMeta(status: string | null) {
   );
 }
 
-export function BrokerTable({ brokers }: { brokers: BrokerRow[] }) {
+// `initialQuery` = the ?q= from a link (the Aprobaciones duplicate chip).
+export function BrokerTable({
+  brokers,
+  initialQuery = "",
+}: {
+  brokers: BrokerRow[];
+  initialQuery?: string;
+}) {
   const router = useRouter();
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(initialQuery);
   const [tier, setTier] = useState<"todos" | Tier>("todos");
   const [sortKey, setSortKey] = useState<SortKey>("created_at");
   const [sortDir, setSortDir] = useState<SortDir>("desc");

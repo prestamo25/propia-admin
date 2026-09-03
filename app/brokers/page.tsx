@@ -6,7 +6,12 @@ import { TopNav } from "@/components/TopNav";
 // Always fetch fresh — this is an ops view, never cache it.
 export const dynamic = "force-dynamic";
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string }>;
+}) {
+  const { q } = await searchParams;
   let data;
   try {
     data = await fetchOverview();
@@ -90,7 +95,7 @@ export default async function DashboardPage() {
           />
         </section>
 
-        <BrokerTable brokers={brokers} />
+        <BrokerTable brokers={brokers} initialQuery={q ?? ""} />
 
         <p className="mt-4 text-xs text-neutral-400">
           MB = almacenamiento en R2 (pendiente de conectar).

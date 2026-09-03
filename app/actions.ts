@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getRole } from "@/lib/session";
 import { roleCan } from "@/lib/auth";
+import { PROFILE_TYPE_LABEL } from "@/lib/profileTypes";
 import {
   CANONICAL_PAIRS,
   RESCUE_OTP,
@@ -31,17 +32,51 @@ export async function blockBroker(id: string): Promise<Result> {
   return {};
 }
 
+// Who is deciding — stored on users.reviewed_by next to the DB-stamped
+// reviewed_at, so a rejected row can say «por Mariana el 30 ago». Same labels
+// as the header badge.
+async function reviewer(): Promise<string> {
+  const role = await getRole();
+  return role === "dev" ? "Técnico" : role === "mariana" ? "Mariana" : "Admin";
+}
+
 // Approve a pending account. The app's pending screen listens on the users
-// row over Realtime, so the member's phone flips to "¡Listo!" live.
+// row over Realtime, so the member's phone flips to "¡Listo!" live; the DB
+// trigger also mirrors the decision to WhatsApp (cuenta_aprobada).
 export async function approveUser(id: string): Promise<Result> {
   if (!id) return { error: "Falta el id." };
   const sb = supabaseAdmin();
   const { error } = await sb
     .from("users")
-    .update({ status: "approved", rejection_reason: null })
+    .update({ status: "approved", rejection_reason: null, reviewed_by: await reviewer() })
     .eq("id", id);
   if (error) return { error: error.message };
   revalidatePath("/aprobaciones");
+  return {};
+}
+
+// Approve AS another type (Franz 2026-09-03): people pick the wrong category
+// — a valuador under «Otros», a loan seeker under «Créditos», a company that
+// isn't a real-estate service at all. Invitado is the common case (eventos +
+// servicios, never in the directory). Same UPDATE as approveUser plus the
+// type; the tier gates key off profile_type, and the app lands them on the
+// right tab on its next check. Works on pending AND rejected rows.
+export async function approveUserAs(id: string, profileType: string): Promise<Result> {
+  if (!id) return { error: "Falta el id." };
+  if (!(profileType in PROFILE_TYPE_LABEL)) return { error: "Tipo de perfil inválido." };
+  const sb = supabaseAdmin();
+  const { error } = await sb
+    .from("users")
+    .update({
+      profile_type: profileType,
+      status: "approved",
+      rejection_reason: null,
+      reviewed_by: await reviewer(),
+    })
+    .eq("id", id);
+  if (error) return { error: error.message };
+  revalidatePath("/aprobaciones");
+  revalidatePath("/brokers");
   return {};
 }
 
@@ -54,7 +89,7 @@ export async function rejectUser(id: string, reason: string): Promise<Result> {
   const sb = supabaseAdmin();
   const { error } = await sb
     .from("users")
-    .update({ status: "rejected", rejection_reason: clean })
+    .update({ status: "rejected", rejection_reason: clean, reviewed_by: await reviewer() })
     .eq("id", id);
   if (error) return { error: error.message };
   revalidatePath("/aprobaciones");
