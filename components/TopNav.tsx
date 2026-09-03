@@ -61,6 +61,20 @@ type Item = {
   badge?: number;
 };
 
+// Build stamp baked in by deploy-admin.sh — shown at the foot of the
+// «Técnico» menu so what is live is never a guess (same values as
+// /api/version).
+const BUILD_COMMIT = process.env.NEXT_PUBLIC_BUILD_COMMIT ?? "dev";
+const BUILD_TIME = process.env.NEXT_PUBLIC_BUILD_TIME
+  ? new Intl.DateTimeFormat("es-MX", {
+      timeZone: "America/Mexico_City",
+      day: "numeric",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(new Date(process.env.NEXT_PUBLIC_BUILD_TIME))
+  : null;
+
 const chevron = (
   <svg
     width="12"
@@ -209,6 +223,15 @@ export async function TopNav({ active }: { active: NavKey }) {
       Técnico
     </div>
   );
+  const buildStamp = (
+    <>
+      <div className="mx-2 my-1 h-px bg-neutral-100" />
+      <div className="px-3 py-1.5 text-[11px] tabular-nums text-neutral-400" title="Build en producción">
+        build {BUILD_COMMIT}
+        {BUILD_TIME ? ` · ${BUILD_TIME}` : ""}
+      </div>
+    </>
+  );
 
   return (
     <header className="sticky top-0 z-20 border-b border-black/[0.05] bg-white/65 backdrop-blur-xl">
@@ -246,7 +269,10 @@ export async function TopNav({ active }: { active: NavKey }) {
                   devActive
                     ? ACTIVE
                     : "text-neutral-500 group-hover:text-neutral-800",
-                  dev.map((i) => menuItem(i, false)),
+                  <>
+                    {dev.map((i) => menuItem(i, false))}
+                    {buildStamp}
+                  </>,
                   "left",
                 )}
               </div>
@@ -271,6 +297,7 @@ export async function TopNav({ active }: { active: NavKey }) {
                       <div className="mx-2 my-1 h-px bg-neutral-100" />
                       {devSectionLabel}
                       {dev.map((i) => menuItem(i, true))}
+                      {buildStamp}
                     </>
                   ) : null}
                 </>,

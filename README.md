@@ -33,12 +33,29 @@ To graduate to real per-admin accounts later, swap the check in
 `app/api/login/route.ts` + `middleware.ts` for Supabase auth scoped to admin
 user ids — the data layer (`lib/`) doesn't change.
 
-## Deploy (Vercel)
+## Deploy (AWS Lambda + CloudFront)
 
-1. Push to GitHub (done).
-2. Import the repo in Vercel → add the four env vars above → deploy.
-3. Add the domain `admin.propia.dev` in Vercel, then the matching CNAME in
-   Cloudflare DNS.
+```bash
+./deploy-admin.sh
+```
+
+Builds, ships the zip to Lambda `propia-admin` (us-east-1), invalidates
+CloudFront `E2C70OEAOEPF0Y` and then checks that
+`https://admin.propia.dev/api/version` reports the commit it just built.
+**The last line must say `✓ LIVE`.** Anything else means production did NOT
+change — the script aborts on a dirty tree, a checkout behind `origin/main`,
+a missing `aws` CLI, a failed build, or a Lambda/CloudFront step that didn't
+land. AWS creds come from `~/Developer/.env.work`; the runtime env
+(Supabase, passwords, session secret) lives on the Lambda itself.
+
+Check what is live any time:
+
+```bash
+curl -s https://admin.propia.dev/api/version   # {"commit":"29c2c83","builtAt":"…"}
+git rev-parse --short HEAD                      # should match
+```
+
+The «Técnico ▾» menu in the panel shows the same build stamp.
 
 ## TODO
 

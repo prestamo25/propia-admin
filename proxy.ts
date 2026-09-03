@@ -19,9 +19,11 @@ export async function proxy(req: NextRequest) {
 }
 
 export const config = {
-  // Gate everything except the login page/API, Next internals, and the public
-  // brand assets (the wordmark must load on the un-authenticated login screen).
+  // Gate everything except the login page/API, the build-stamp endpoint
+  // (deploy verification, reveals only a commit hash), Next internals, and
+  // the public brand assets (the wordmark must load on the un-authenticated
+  // login screen).
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|icon.png|logo-text.png|login|api/login).*)",
+    "/((?!_next/static|_next/image|favicon.ico|icon.png|logo-text.png|login|api/login|api/version).*)",
   ],
 };
