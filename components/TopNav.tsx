@@ -18,7 +18,8 @@ type NavKey =
   | "almacenamiento"
   | "lifecycle"
   | "zonas"
-  | "mapa";
+  | "mapa"
+  | "ubicaciones";
 
 // The tab row folds from the right into a «Más» menu as the window narrows
 // (Franz 2026-09-03: his everyday window is ~960px wide and the row
@@ -140,6 +141,7 @@ export async function TopNav({ active }: { active: NavKey }) {
       tier: "lg",
     },
     { href: "/lifecycle", label: "Ciclo de vida", key: "lifecycle", tier: "lg" },
+    { href: "/ubicaciones", label: "Ubicaciones", key: "ubicaciones", tier: "lg" },
   ];
   const folded = main.filter((i) => i.tier);
   const activeMain = main.find((i) => i.key === active);

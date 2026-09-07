@@ -20,7 +20,8 @@ type NavKey =
   | "almacenamiento"
   | "lifecycle"
   | "zonas"
-  | "mapa";
+  | "mapa"
+  | "ubicaciones";
 
 type Item = {
   href: string;
@@ -238,6 +239,17 @@ export function MobileNav({
         <svg {...STROKE}>
           <circle cx="12" cy="12" r="10" />
           <path d="M12 6v6l4 2" />
+        </svg>
+      ),
+    },
+    {
+      href: "/ubicaciones",
+      label: "Ubicaciones",
+      key: "ubicaciones",
+      icon: (
+        <svg {...STROKE}>
+          <path d="M12 21s-6-5.3-6-10a6 6 0 0 1 12 0c0 4.7-6 10-6 10z" />
+          <circle cx="12" cy="11" r="2" />
         </svg>
       ),
     },

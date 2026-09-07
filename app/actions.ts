@@ -346,3 +346,67 @@ export async function ignorarNombre(estado: string, nombre: string): Promise<Res
   revalidatePath("/zonas");
   return {};
 }
+
+
+// «Ubicaciones dudosas» (metro plan, 2026-09-07). Accepting rewrites the
+// listing's location to the resolver's suggestion: a point keeps lat/lng and
+// takes the colonia under it, an area keeps only the colonia. The broker's
+// original map pick (place_id) is cleared — a human just overruled it. Keeping
+// closes the case so the sweep never raises it again.
+export async function acceptGeoReview(id: string): Promise<Result> {
+  if (!id) return { error: "Falta el id." };
+  const sb = supabaseAdmin();
+  const { data: row, error } = await sb
+    .from("geo_review")
+    .select("id, kind, ref_id, suggested, status")
+    .eq("id", id)
+    .maybeSingle();
+  if (error) return { error: error.message };
+  if (!row || row.status !== "pending") return { error: "Este caso ya se decidió." };
+  const s = (row.suggested ?? {}) as {
+    precision?: string | null; lat?: number | null; lng?: number | null; colonia_key?: string | null;
+  };
+  if (row.kind === "property") {
+    let coloniaKey = s.colonia_key ?? null;
+    if (!coloniaKey && s.lat != null && s.lng != null) {
+      const { data: prop } = await sb.from("properties").select("state").eq("id", row.ref_id).maybeSingle();
+      const { data: k } = await sb.rpc("colonia_key_at", { p_lat: s.lat, p_lng: s.lng, p_estado: prop?.state ?? null });
+      coloniaKey = (k as string | null) ?? null;
+    }
+    const isPoint = s.precision === "point" && s.lat != null && s.lng != null;
+    if (!isPoint && !coloniaKey) return { error: "La sugerencia no trae una ubicación aplicable." };
+    const { error: e2 } = await sb
+      .from("properties")
+      .update({
+        lat: isPoint ? s.lat : null,
+        lng: isPoint ? s.lng : null,
+        place_id: null,
+        colonia_key: coloniaKey,
+        colonia_sweep_at: new Date().toISOString(),
+      })
+      .eq("id", row.ref_id);
+    if (e2) return { error: e2.message };
+  } else {
+    return { error: "Por ahora sólo se revisan propiedades." };
+  }
+  const { error: e3 } = await sb
+    .from("geo_review")
+    .update({ status: "accepted", decided_at: new Date().toISOString(), decided_by: await reviewer() })
+    .eq("id", id);
+  if (e3) return { error: e3.message };
+  revalidatePath("/ubicaciones");
+  return {};
+}
+
+export async function keepGeoReview(id: string): Promise<Result> {
+  if (!id) return { error: "Falta el id." };
+  const sb = supabaseAdmin();
+  const { error } = await sb
+    .from("geo_review")
+    .update({ status: "kept", decided_at: new Date().toISOString(), decided_by: await reviewer() })
+    .eq("id", id)
+    .eq("status", "pending");
+  if (error) return { error: error.message };
+  revalidatePath("/ubicaciones");
+  return {};
+}
