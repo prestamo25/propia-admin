@@ -245,6 +245,11 @@ export function MapaClient({ data }: { data: MapData }) {
     const b = new google.maps.LatLngBounds();
     for (const p of pts) b.extend(p);
     m.fitBounds(b, 40);
+    // A handful of pins on one block would zoom past the imagery (grey map);
+    // street level is as close as the overview needs to start.
+    google.maps.event.addListenerOnce(m, "idle", () => {
+      if ((m.getZoom() ?? 0) > 16) m.setZoom(16);
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only on estado / test toggle (and first ready)
   }, [ready, estado, testOnly]);
 
