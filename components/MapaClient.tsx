@@ -46,6 +46,9 @@ export function MapaClient({ data }: { data: MapData }) {
   const requestMarkers = useRef<Map<string, { marker: google.maps.Marker; circle: google.maps.Circle | null }>>(new Map());
   const [ready, setReady] = useState(false);
   const [authFail, setAuthFail] = useState(false);
+  // Radius circles only from zoom 12 up: at city level 276 overlapping
+  // circles were one orange blob; the diamonds already say where demand is.
+  const [zoom, setZoom] = useState(11);
 
   const [estado, setEstado] = useState<string>(data.states.includes("Puebla") ? "Puebla" : (data.states[0] ?? ""));
   const [op, setOp] = useState<Op>("todas");
@@ -100,6 +103,7 @@ export function MapaClient({ data }: { data: MapData }) {
           clickableIcons: false,
         });
         map.current = m;
+        m.addListener("zoom_changed", () => setZoom(m.getZoom() ?? 11));
         info.current = new InfoWindow({ maxWidth: 300 });
         clusterer.current = new MarkerClusterer({ map: m, markers: [] });
 
@@ -168,10 +172,10 @@ export function MapaClient({ data }: { data: MapData }) {
     for (const [id, { marker, circle }] of requestMarkers.current) {
       const on = wantedReq.has(id);
       marker.setMap(on ? m : null);
-      circle?.setMap(on ? m : null);
+      circle?.setMap(on && zoom >= 12 ? m : null);
     }
     info.current?.close();
-  }, [ready, layers, shownListings, shownRequests]);
+  }, [ready, layers, shownListings, shownRequests, zoom]);
 
   // Recenter when the estado changes (Puebla opens on Puebla, Chihuahua on Chihuahua…).
   useEffect(() => {
