@@ -81,6 +81,10 @@ export function MapaClient({ data }: { data: MapData }) {
   const [tipo, setTipo] = useState<string>("todos");
   const [layers, setLayers] = useState<Record<Layer, boolean>>({ listings: true, requests: true });
   const [onlyPrecise, setOnlyPrecise] = useState(false);
+  // «Sólo Pablo y yo»: the two test accounts, every estado (their pins are
+  // the ones they just uploaded, wherever they put them).
+  const [testOnly, setTestOnly] = useState(false);
+  const testOwners = useMemo(() => new Set(data.testOwnerIds), [data.testOwnerIds]);
 
   const tipos = useMemo(
     () => Array.from(new Set(data.listings.map((l) => l.type))).sort(),
@@ -91,23 +95,25 @@ export function MapaClient({ data }: { data: MapData }) {
     () =>
       data.listings.filter(
         (l) =>
-          (!estado || l.state === estado) &&
+          (!testOnly || testOwners.has(l.user_id)) &&
+          (!estado || testOnly || l.state === estado) &&
           (op === "todas" || l.transaction === op) &&
           (tipo === "todos" || l.type === tipo) &&
           (!onlyPrecise || l.precise),
       ),
-    [data.listings, estado, op, tipo, onlyPrecise],
+    [data.listings, estado, op, tipo, onlyPrecise, testOnly, testOwners],
   );
   const shownRequests = useMemo(
     () =>
       data.requests.filter(
         (r) =>
-          (!estado || (r.states ?? []).includes(estado)) &&
+          (!testOnly || testOwners.has(r.created_by)) &&
+          (!estado || testOnly || (r.states ?? []).includes(estado)) &&
           (op === "todas" || r.transaction === op) &&
           (tipo === "todos" || (r.types ?? []).length === 0 || (r.types ?? []).includes(tipo)) &&
           (!onlyPrecise || r.precise),
       ),
-    [data.requests, estado, op, tipo, onlyPrecise],
+    [data.requests, estado, op, tipo, onlyPrecise, testOnly, testOwners],
   );
 
   // One map per visit.
@@ -239,8 +245,8 @@ export function MapaClient({ data }: { data: MapData }) {
     const b = new google.maps.LatLngBounds();
     for (const p of pts) b.extend(p);
     m.fitBounds(b, 40);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- only on estado (and first ready)
-  }, [ready, estado]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only on estado / test toggle (and first ready)
+  }, [ready, estado, testOnly]);
 
   const preciseL = shownListings.filter((l) => l.precise).length;
   const preciseR = shownRequests.filter((r) => r.precise).length;
@@ -286,6 +292,10 @@ export function MapaClient({ data }: { data: MapData }) {
         <label className="inline-flex items-center gap-1.5">
           <input type="checkbox" checked={onlyPrecise} onChange={(e) => setOnlyPrecise(e.target.checked)} />
           Sólo con punto exacto
+        </label>
+        <label className="inline-flex items-center gap-1.5 rounded-md bg-amber-50 px-2 py-0.5 text-amber-800">
+          <input type="checkbox" checked={testOnly} onChange={(e) => setTestOnly(e.target.checked)} />
+          Sólo Pablo y yo (pruebas)
         </label>
         {gError ? (
           <span className="rounded bg-rose-50 px-2 py-0.5 text-xs font-medium text-rose-700">

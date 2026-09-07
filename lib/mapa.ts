@@ -47,8 +47,18 @@ export type MapData = {
   requests: MapRequest[];
   missing: { listings: number; requests: number };
   states: string[];
+  // Accounts whose pins are test material (Franz 2026-09-07: «show only what
+  // Pablo Prestamo and I upload for testing purposes») — the «Sólo Pablo y yo»
+  // toggle filters to these.
+  testOwnerIds: string[];
   generatedAt: string;
 };
+
+// Pablo Prestamo (Propia AI) and Franz's «Propia Broker» account.
+const TEST_OWNER_IDS = [
+  "fb561d43-ae89-4d96-b045-046edaad2eb3",
+  "15fef8d4-0384-4d50-89c5-059c93e9003d",
+];
 
 type PropRow = {
   id: string; name: string | null; price: number | null; currency: string | null;
@@ -158,6 +168,7 @@ export async function fetchMapData(): Promise<MapData> {
     requests,
     missing: { listings: missingListings, requests: missingRequests },
     states,
+    testOwnerIds: TEST_OWNER_IDS,
     generatedAt: new Date().toISOString(),
   };
 }
