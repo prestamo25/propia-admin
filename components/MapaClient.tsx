@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { importLibrary, setOptions } from "@googlemaps/js-api-loader";
-import { MarkerClusterer } from "@googlemaps/markerclusterer";
+import { MarkerClusterer, type Cluster } from "@googlemaps/markerclusterer";
 import type { MapData, MapListing, MapRequest } from "@/lib/mapa";
 
 // Same browser key and loader as the zonas bench (ZonaMap.tsx). The map is
@@ -33,6 +33,29 @@ function pinIcon(color: string, precise: boolean, shape: "circle" | "diamond"): 
     anchor: new google.maps.Point(9, 9),
   };
 }
+
+// Cluster bubbles as CLASSIC markers. The clusterer's default renderer picks
+// Advanced Markers whenever google.maps.marker is loaded, and those need a
+// Map ID — without one Google logs «inicializado sin un ID de mapa válido» per
+// bubble and throws up the «no puede cargar Google Maps» dialog (seen when
+// arriving from Zonas, where the marker library was already in memory).
+const clusterRenderer = {
+  render({ count, position }: Cluster): google.maps.Marker {
+    const size = count < 10 ? 34 : count < 100 ? 40 : 48;
+    const r = size / 2;
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}"><circle cx="${r}" cy="${r}" r="${r - 2}" fill="#1c4588" fill-opacity="0.88" stroke="#ffffff" stroke-width="2"/></svg>`;
+    return new google.maps.Marker({
+      position,
+      icon: {
+        url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`,
+        scaledSize: new google.maps.Size(size, size),
+        anchor: new google.maps.Point(r, r),
+      },
+      label: { text: String(count), color: "#ffffff", fontSize: "12px", fontWeight: "600" },
+      zIndex: 1000 + count,
+    });
+  },
+};
 
 type Op = "todas" | "venta" | "renta";
 type Layer = "listings" | "requests";
@@ -101,8 +124,8 @@ export function MapaClient({ data }: { data: MapData }) {
       origError.apply(console, args);
     };
     setOptions({ key: KEY, v: "weekly", language: "es", region: "MX" });
-    Promise.all([importLibrary("maps"), importLibrary("marker")])
-      .then(([{ Map: GMap, InfoWindow }]) => {
+    importLibrary("maps")
+      .then(({ Map: GMap, InfoWindow }) => {
         if (cancelled) return;
         const m = new GMap(el, {
           center: { lat: 19.03, lng: -98.24 },
@@ -115,7 +138,7 @@ export function MapaClient({ data }: { data: MapData }) {
         map.current = m;
         m.addListener("zoom_changed", () => setZoom(m.getZoom() ?? 11));
         info.current = new InfoWindow({ maxWidth: 300 });
-        clusterer.current = new MarkerClusterer({ map: m, markers: [] });
+        clusterer.current = new MarkerClusterer({ map: m, markers: [], renderer: clusterRenderer });
 
         // Build every marker once; filters attach/detach them.
         for (const l of data.listings) {
