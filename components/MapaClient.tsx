@@ -46,6 +46,9 @@ export function MapaClient({ data }: { data: MapData }) {
   const requestMarkers = useRef<Map<string, { marker: google.maps.Marker; circle: google.maps.Circle | null }>>(new Map());
   const [ready, setReady] = useState(false);
   const [authFail, setAuthFail] = useState(false);
+  // Google reports the reason only in the console («… error: XxxMapError»).
+  // Mirror it into the page so a screenshot of the failure names the cause.
+  const [gError, setGError] = useState<string | null>(null);
   // Radius circles only from zoom 12 up: at city level 276 overlapping
   // circles were one orange blob; the diamonds already say where demand is.
   const [zoom, setZoom] = useState(11);
@@ -90,6 +93,13 @@ export function MapaClient({ data }: { data: MapData }) {
     if (!el || !KEY) return;
     let cancelled = false;
     (window as unknown as { gm_authFailure?: () => void }).gm_authFailure = () => setAuthFail(true);
+    const origError = console.error;
+    console.error = (...args: unknown[]) => {
+      const text = args.map(String).join(" ");
+      const m = /Google Maps JavaScript API error:\s*(\w+)/.exec(text);
+      if (m) setGError(m[1]);
+      origError.apply(console, args);
+    };
     setOptions({ key: KEY, v: "weekly", language: "es", region: "MX" });
     Promise.all([importLibrary("maps"), importLibrary("marker")])
       .then(([{ Map: GMap, InfoWindow }]) => {
@@ -152,6 +162,7 @@ export function MapaClient({ data }: { data: MapData }) {
       .catch(() => setAuthFail(true));
     return () => {
       cancelled = true;
+      console.error = origError;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- data is a one-shot server payload
   }, []);
@@ -253,6 +264,11 @@ export function MapaClient({ data }: { data: MapData }) {
           <input type="checkbox" checked={onlyPrecise} onChange={(e) => setOnlyPrecise(e.target.checked)} />
           Sólo con punto exacto
         </label>
+        {gError ? (
+          <span className="rounded bg-rose-50 px-2 py-0.5 text-xs font-medium text-rose-700">
+            Google: {gError}
+          </span>
+        ) : null}
         <span className="ml-auto text-xs text-neutral-500">
           Relleno = punto exacto · hueco = centro de la colonia ({(shownListings.length - preciseL).toLocaleString("en-US")} propiedades, {shownRequests.length - preciseR} requerimientos) ·
           sin ubicación: {data.missing.listings} propiedades, {data.missing.requests} requerimientos
