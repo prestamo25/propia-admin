@@ -177,11 +177,27 @@ export function MapaClient({ data }: { data: MapData }) {
   useEffect(() => {
     const m = map.current;
     if (!ready || !m) return;
-    const pts = [
+    const all = [
       ...shownListings.map((l) => ({ lat: l.lat, lng: l.lng })),
       ...shownRequests.map((r) => ({ lat: r.lat, lng: r.lng })),
     ];
-    if (!pts.length) return;
+    if (!all.length) return;
+    // A handful of listings carry coordinates far from their stated estado
+    // (a Puebla casa pinned in Guadalajara). Fit the view to the dense core:
+    // points within ~120 km of the median, so one bad pin can't zoom the
+    // whole state out to the country.
+    const median = (xs: number[]) => {
+      const s = [...xs].sort((a, b) => a - b);
+      return s[Math.floor(s.length / 2)];
+    };
+    const c = { lat: median(all.map((p) => p.lat)), lng: median(all.map((p) => p.lng)) };
+    const kmPerDeg = 111;
+    const core = all.filter((p) => {
+      const dLat = (p.lat - c.lat) * kmPerDeg;
+      const dLng = (p.lng - c.lng) * kmPerDeg * Math.cos((c.lat * Math.PI) / 180);
+      return Math.hypot(dLat, dLng) <= 120;
+    });
+    const pts = core.length ? core : all;
     const b = new google.maps.LatLngBounds();
     for (const p of pts) b.extend(p);
     m.fitBounds(b, 40);
