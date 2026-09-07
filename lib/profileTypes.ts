@@ -45,6 +45,7 @@ const PROFILE_DATA_FIELDS: { key: string; label: string; link?: boolean }[] = [
   { key: "cargo", label: "Cargo" },
   { key: "descripcion", label: "Descripción" },
   { key: "sitio_web", label: "Sitio web", link: true },
+  { key: "comision", label: "Comisión al asesor" }, // referral commission (app 2026-09-07)
 ];
 
 export type ProfileDetail = { key: string; label: string; value: string; href?: string };
