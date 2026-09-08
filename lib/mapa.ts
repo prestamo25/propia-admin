@@ -57,6 +57,9 @@ export type MapWaDemand = {
   group_name: string | null;
   state: string | null;
   sender_name: string | null;
+  // Last 10 digits of the sender's phone (the capture's contact_phone): lets
+  // «Sólo Pablo y yo» show the test messages we post in the groups ourselves.
+  sender_phone10: string | null;
   lat: number;
   lng: number;
   precise: boolean;
@@ -74,6 +77,8 @@ export type MapData = {
   // Pablo Prestamo and I upload for testing purposes») — the «Sólo Pablo y yo»
   // toggle filters to these.
   testOwnerIds: string[];
+  // Last 10 digits of the test accounts' phones, for the WhatsApp layer.
+  testPhones: string[];
   generatedAt: string;
 };
 
@@ -97,7 +102,7 @@ type ReqRow = {
 };
 type Centroid = { key: string; nombre: string; estado: string; lat: number; lng: number };
 type WaRow = {
-  id: string; captured_at: string; group_jid: string; sender_name: string | null;
+  id: string; captured_at: string; group_jid: string; sender_name: string | null; contact_phone: string | null;
   extracted: { title?: string | null; operation?: string | null; property_type?: string | null; price?: number | null; price_min?: number | null; location?: string | null } | null;
   geo_lat: number | null; geo_lng: number | null; geo_precision: string | null; geo_place: string | null;
 };
@@ -131,7 +136,7 @@ export async function fetchMapData(): Promise<MapData> {
     pageAll<WaRow>(() =>
       sb
         .from("wa_listings")
-        .select("id, captured_at, group_jid, sender_name, extracted, geo_lat, geo_lng, geo_precision, geo_place")
+        .select("id, captured_at, group_jid, sender_name, contact_phone, extracted, geo_lat, geo_lng, geo_precision, geo_place")
         .eq("kind", "demanda")
         .is("declined_at", null)
         .gte("captured_at", since)
@@ -143,6 +148,13 @@ export async function fetchMapData(): Promise<MapData> {
     }),
   ]);
   const groupByJid = new Map(groups.map((g) => [g.group_jid, g]));
+  const last10 = (v: string | null | undefined) => {
+    const d = (v ?? "").replace(/\D/g, "");
+    return d.length >= 10 ? d.slice(-10) : null;
+  };
+  const { data: testUsers, error: tuErr } = await sb.from("users").select("id, phone").in("id", TEST_OWNER_IDS);
+  if (tuErr) throw new Error(tuErr.message);
+  const testPhones = ((testUsers ?? []) as { phone: string | null }[]).map((u) => last10(u.phone)).filter((x): x is string => !!x);
 
   // Centroids for the colonia-only rows (one RPC, service role only).
   const keys = new Set<string>();
@@ -214,7 +226,7 @@ export async function fetchMapData(): Promise<MapData> {
     waDemands.push({
       id: w.id, title: x.title ?? null, operation: x.operation ?? null, property_type: x.property_type ?? null,
       price: x.price ?? null, price_min: x.price_min ?? null, location: x.location ?? null,
-      group_name: g?.name ?? null, state: g?.state ?? null, sender_name: w.sender_name,
+      group_name: g?.name ?? null, state: g?.state ?? null, sender_name: w.sender_name, sender_phone10: last10(w.contact_phone),
       lat: w.geo_lat, lng: w.geo_lng, precise: w.geo_precision === "point",
       place: w.geo_precision === "point" ? null : (w.geo_place ?? x.location ?? null), captured_at: w.captured_at,
     });
@@ -233,6 +245,7 @@ export async function fetchMapData(): Promise<MapData> {
     missing: { listings: missingListings, requests: missingRequests, wa: missingWa },
     states,
     testOwnerIds: TEST_OWNER_IDS,
+    testPhones,
     generatedAt: new Date().toISOString(),
   };
 }

@@ -137,19 +137,20 @@ export function MapaClient({ data }: { data: MapData }) {
     [data.requests, estado, op, tipo, onlyPrecise, testOnly, testOwners],
   );
 
-  // WhatsApp demands have no owner: the «Sólo Pablo y yo» view hides them.
+  // WhatsApp demands have no app owner: in «Sólo Pablo y yo» the ones we
+  // posted from our own phones stand in for ownership.
+  const testPhones = useMemo(() => new Set(data.testPhones), [data.testPhones]);
   const shownWa = useMemo(
     () =>
-      testOnly
-        ? []
-        : data.waDemands.filter(
-            (w) =>
-              (!estado || w.state === estado) &&
-              (op === "todas" || w.operation === op) &&
-              (tipo === "todos" || !w.property_type || w.property_type === tipo) &&
-              (!onlyPrecise || w.precise),
-          ),
-    [data.waDemands, estado, op, tipo, onlyPrecise, testOnly],
+      data.waDemands.filter(
+        (w) =>
+          (!testOnly || (!!w.sender_phone10 && testPhones.has(w.sender_phone10))) &&
+          (!estado || testOnly || w.state === estado) &&
+          (op === "todas" || w.operation === op) &&
+          (tipo === "todos" || !w.property_type || w.property_type === tipo) &&
+          (!onlyPrecise || w.precise),
+      ),
+    [data.waDemands, estado, op, tipo, onlyPrecise, testOnly, testPhones],
   );
 
   // One map per visit.
