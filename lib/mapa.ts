@@ -42,10 +42,33 @@ export type MapRequest = {
   created_at: string;
 };
 
+// Requerimientos that arrived through WhatsApp groups (Franz 2026-09-07):
+// the bot's demand captures, placed by the resolver's own geo — exact point,
+// or the centre of the zone it resolved to (hollow). Nobody owns them until a
+// broker claims one in the app; the popup shows the group and the sender.
+export type MapWaDemand = {
+  id: string;
+  title: string | null;
+  operation: string | null;
+  property_type: string | null;
+  price: number | null;
+  price_min: number | null;
+  location: string | null;
+  group_name: string | null;
+  state: string | null;
+  sender_name: string | null;
+  lat: number;
+  lng: number;
+  precise: boolean;
+  place: string | null;
+  captured_at: string;
+};
+
 export type MapData = {
   listings: MapListing[];
   requests: MapRequest[];
-  missing: { listings: number; requests: number };
+  waDemands: MapWaDemand[];
+  missing: { listings: number; requests: number; wa: number };
   states: string[];
   // Accounts whose pins are test material (Franz 2026-09-07: «show only what
   // Pablo Prestamo and I upload for testing purposes») — the «Sólo Pablo y yo»
@@ -73,13 +96,21 @@ type ReqRow = {
   zona_key: string | null; zona_keys: string[] | null; created_by: string; created_at: string;
 };
 type Centroid = { key: string; nombre: string; estado: string; lat: number; lng: number };
+type WaRow = {
+  id: string; captured_at: string; group_jid: string; sender_name: string | null;
+  extracted: { title?: string | null; operation?: string | null; property_type?: string | null; price?: number | null; price_min?: number | null; location?: string | null } | null;
+  geo_lat: number | null; geo_lng: number | null; geo_precision: string | null; geo_place: string | null;
+};
+type GroupRow = { group_jid: string; name: string | null; state: string | null };
+const WA_DEMAND_DAYS = 30; // same window as the demand lifecycle: older asks are stale
 
 const chunk = <T,>(xs: T[], n: number) =>
   Array.from({ length: Math.ceil(xs.length / n) }, (_, i) => xs.slice(i * n, i * n + n));
 
 export async function fetchMapData(): Promise<MapData> {
   const sb = supabaseAdmin();
-  const [props, reqs] = await Promise.all([
+  const since = new Date(Date.now() - WA_DEMAND_DAYS * 24 * 3600 * 1000).toISOString();
+  const [props, reqs, waRows, groups] = await Promise.all([
     pageAll<PropRow>(() =>
       sb
         .from("properties")
@@ -97,7 +128,21 @@ export async function fetchMapData(): Promise<MapData> {
         .eq("lifecycle", "active")
         .order("created_at", { ascending: false }),
     ),
+    pageAll<WaRow>(() =>
+      sb
+        .from("wa_listings")
+        .select("id, captured_at, group_jid, sender_name, extracted, geo_lat, geo_lng, geo_precision, geo_place")
+        .eq("kind", "demanda")
+        .is("declined_at", null)
+        .gte("captured_at", since)
+        .order("captured_at", { ascending: false }),
+    ),
+    sb.from("wa_groups").select("group_jid, name, state").then(({ data, error }) => {
+      if (error) throw new Error(error.message);
+      return (data ?? []) as GroupRow[];
+    }),
   ]);
+  const groupByJid = new Map(groups.map((g) => [g.group_jid, g]));
 
   // Centroids for the colonia-only rows (one RPC, service role only).
   const keys = new Set<string>();
@@ -158,15 +203,34 @@ export async function fetchMapData(): Promise<MapData> {
     });
   }
 
+  // WhatsApp demands: the resolver's point (exact) or zone centre (hollow);
+  // municipality-level and unresolved ones have no honest place on a map.
+  const waDemands: MapWaDemand[] = [];
+  let missingWa = 0;
+  for (const w of waRows) {
+    if (w.geo_lat == null || w.geo_lng == null || (w.geo_precision !== "point" && w.geo_precision !== "area")) { missingWa++; continue; }
+    const g = groupByJid.get(w.group_jid);
+    const x = w.extracted ?? {};
+    waDemands.push({
+      id: w.id, title: x.title ?? null, operation: x.operation ?? null, property_type: x.property_type ?? null,
+      price: x.price ?? null, price_min: x.price_min ?? null, location: x.location ?? null,
+      group_name: g?.name ?? null, state: g?.state ?? null, sender_name: w.sender_name,
+      lat: w.geo_lat, lng: w.geo_lng, precise: w.geo_precision === "point",
+      place: w.geo_precision === "point" ? null : (w.geo_place ?? x.location ?? null), captured_at: w.captured_at,
+    });
+  }
+
   const stateCount = new Map<string, number>();
   for (const l of listings) if (l.state) stateCount.set(l.state, (stateCount.get(l.state) ?? 0) + 1);
   for (const r of requests) for (const s of r.states ?? []) stateCount.set(s, (stateCount.get(s) ?? 0) + 1);
+  for (const w of waDemands) if (w.state) stateCount.set(w.state, (stateCount.get(w.state) ?? 0) + 1);
   const states = Array.from(stateCount.entries()).sort((a, b) => b[1] - a[1]).map(([s]) => s);
 
   return {
     listings,
     requests,
-    missing: { listings: missingListings, requests: missingRequests },
+    waDemands,
+    missing: { listings: missingListings, requests: missingRequests, wa: missingWa },
     states,
     testOwnerIds: TEST_OWNER_IDS,
     generatedAt: new Date().toISOString(),

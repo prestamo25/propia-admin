@@ -2,14 +2,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { importLibrary, setOptions } from "@googlemaps/js-api-loader";
 import { MarkerClusterer, type Cluster } from "@googlemaps/markerclusterer";
-import type { MapData, MapListing, MapRequest } from "@/lib/mapa";
+import type { MapData, MapListing, MapRequest, MapWaDemand } from "@/lib/mapa";
 
 // Same browser key and loader as the zonas bench (ZonaMap.tsx). The map is
 // created ONCE; filters only swap markers in and out of the clusterer, so a
 // visit costs one map load however much Pablo plays with the filters.
 const KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY ?? "";
 
-const COLOR = { venta: "#1c4588", renta: "#0f766e", req: "#b45309" };
+const COLOR = { venta: "#1c4588", renta: "#0f766e", req: "#b45309", wa: "#6d28d9" };
 const TYPE_LABEL: Record<string, string> = {
   casa: "Casa", departamento: "Depto", terreno: "Terreno", oficina: "Oficina",
   local: "Local", bodega: "Bodega", nave: "Nave",
@@ -39,11 +39,16 @@ function pinIcon(color: string, precise: boolean, shape: "circle" | "diamond"): 
 // Map ID — without one Google logs «inicializado sin un ID de mapa válido» per
 // bubble and throws up the «no puede cargar Google Maps» dialog (seen when
 // arriving from Zonas, where the marker library was already in memory).
-const clusterRenderer = {
+const clusterRenderer = clusterRendererFor("#1c4588");
+// WhatsApp demands cluster on their own, in their own colour, so a violet
+// bubble always means «asks from the groups», never a mix with properties.
+const waClusterRenderer = clusterRendererFor(COLOR.wa);
+function clusterRendererFor(color: string) {
+  return {
   render({ count, position }: Cluster): google.maps.Marker {
     const size = count < 10 ? 34 : count < 100 ? 40 : 48;
     const r = size / 2;
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}"><circle cx="${r}" cy="${r}" r="${r - 2}" fill="#1c4588" fill-opacity="0.88" stroke="#ffffff" stroke-width="2"/></svg>`;
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}"><circle cx="${r}" cy="${r}" r="${r - 2}" fill="${color}" fill-opacity="0.88" stroke="#ffffff" stroke-width="2"/></svg>`;
     return new google.maps.Marker({
       position,
       icon: {
@@ -55,17 +60,20 @@ const clusterRenderer = {
       zIndex: 1000 + count,
     });
   },
-};
+  };
+}
 
 type Op = "todas" | "venta" | "renta";
-type Layer = "listings" | "requests";
+type Layer = "listings" | "requests" | "wa";
 
 export function MapaClient({ data }: { data: MapData }) {
   const mapEl = useRef<HTMLDivElement>(null);
   const map = useRef<google.maps.Map | null>(null);
   const info = useRef<google.maps.InfoWindow | null>(null);
   const clusterer = useRef<MarkerClusterer | null>(null);
+  const waClusterer = useRef<MarkerClusterer | null>(null);
   const listingMarkers = useRef<Map<string, google.maps.Marker>>(new Map());
+  const waMarkers = useRef<Map<string, google.maps.Marker>>(new Map());
   const requestMarkers = useRef<Map<string, { marker: google.maps.Marker; circle: google.maps.Circle | null }>>(new Map());
   const [ready, setReady] = useState(false);
   const [authFail, setAuthFail] = useState(false);
@@ -79,7 +87,7 @@ export function MapaClient({ data }: { data: MapData }) {
   const [estado, setEstado] = useState<string>(data.states.includes("Puebla") ? "Puebla" : (data.states[0] ?? ""));
   const [op, setOp] = useState<Op>("todas");
   const [tipo, setTipo] = useState<string>("todos");
-  const [layers, setLayers] = useState<Record<Layer, boolean>>({ listings: true, requests: true });
+  const [layers, setLayers] = useState<Record<Layer, boolean>>({ listings: true, requests: true, wa: true });
   const [onlyPrecise, setOnlyPrecise] = useState(false);
   // «Sólo Pablo y yo»: the two test accounts, every estado (their pins are
   // the ones they just uploaded, wherever they put them).
@@ -116,6 +124,21 @@ export function MapaClient({ data }: { data: MapData }) {
     [data.requests, estado, op, tipo, onlyPrecise, testOnly, testOwners],
   );
 
+  // WhatsApp demands have no owner: the «Sólo Pablo y yo» view hides them.
+  const shownWa = useMemo(
+    () =>
+      testOnly
+        ? []
+        : data.waDemands.filter(
+            (w) =>
+              (!estado || w.state === estado) &&
+              (op === "todas" || w.operation === op) &&
+              (tipo === "todos" || !w.property_type || w.property_type === tipo) &&
+              (!onlyPrecise || w.precise),
+          ),
+    [data.waDemands, estado, op, tipo, onlyPrecise, testOnly],
+  );
+
   // One map per visit.
   useEffect(() => {
     const el = mapEl.current;
@@ -145,6 +168,7 @@ export function MapaClient({ data }: { data: MapData }) {
         m.addListener("zoom_changed", () => setZoom(m.getZoom() ?? 11));
         info.current = new InfoWindow({ maxWidth: 300 });
         clusterer.current = new MarkerClusterer({ map: m, markers: [], renderer: clusterRenderer });
+        waClusterer.current = new MarkerClusterer({ map: m, markers: [], renderer: waClusterRenderer });
 
         // Build every marker once; filters attach/detach them.
         for (const l of data.listings) {
@@ -186,6 +210,18 @@ export function MapaClient({ data }: { data: MapData }) {
           });
           requestMarkers.current.set(r.id, { marker, circle });
         }
+        for (const w of data.waDemands) {
+          const marker = new google.maps.Marker({
+            position: { lat: w.lat, lng: w.lng },
+            icon: pinIcon(COLOR.wa, w.precise, "diamond"),
+            title: w.title ?? "",
+          });
+          marker.addListener("click", () => {
+            info.current?.setContent(waCard(w));
+            info.current?.open({ map: m, anchor: marker });
+          });
+          waMarkers.current.set(w.id, marker);
+        }
         setReady(true);
       })
       .catch(() => setAuthFail(true));
@@ -214,8 +250,16 @@ export function MapaClient({ data }: { data: MapData }) {
       marker.setMap(on ? m : null);
       circle?.setMap(on && zoom >= 12 ? m : null);
     }
+    const wcl = waClusterer.current;
+    if (wcl) {
+      const wantedWa = new Set(layers.wa ? shownWa.map((w) => w.id) : []);
+      const waMs: google.maps.Marker[] = [];
+      for (const [id, marker] of waMarkers.current) if (wantedWa.has(id)) waMs.push(marker);
+      wcl.clearMarkers(true);
+      wcl.addMarkers(waMs);
+    }
     info.current?.close();
-  }, [ready, layers, shownListings, shownRequests, zoom]);
+  }, [ready, layers, shownListings, shownRequests, shownWa, zoom]);
 
   // Recenter when the estado changes (Puebla opens on Puebla, Chihuahua on Chihuahua…).
   useEffect(() => {
@@ -255,6 +299,7 @@ export function MapaClient({ data }: { data: MapData }) {
 
   const preciseL = shownListings.filter((l) => l.precise).length;
   const preciseR = shownRequests.filter((r) => r.precise).length;
+  const preciseW = shownWa.filter((w) => w.precise).length;
 
   return (
     <div className="flex flex-1 flex-col">
@@ -295,6 +340,11 @@ export function MapaClient({ data }: { data: MapData }) {
           Requerimientos <span className="text-neutral-500">({shownRequests.length.toLocaleString("en-US")})</span>
         </label>
         <label className="inline-flex items-center gap-1.5">
+          <input type="checkbox" checked={layers.wa} onChange={(e) => setLayers((l) => ({ ...l, wa: e.target.checked }))} />
+          <span className="inline-block h-3 w-3 rotate-45" style={{ background: COLOR.wa }} />
+          Requerimientos de WhatsApp <span className="text-neutral-500">({shownWa.length.toLocaleString("en-US")})</span>
+        </label>
+        <label className="inline-flex items-center gap-1.5">
           <input type="checkbox" checked={onlyPrecise} onChange={(e) => setOnlyPrecise(e.target.checked)} />
           Sólo con punto exacto
         </label>
@@ -308,8 +358,8 @@ export function MapaClient({ data }: { data: MapData }) {
           </span>
         ) : null}
         <span className="ml-auto text-xs text-neutral-500">
-          Relleno = punto exacto · hueco = centro de la colonia ({(shownListings.length - preciseL).toLocaleString("en-US")} propiedades, {shownRequests.length - preciseR} requerimientos) ·
-          sin ubicación: {data.missing.listings} propiedades, {data.missing.requests} requerimientos
+          Relleno = punto exacto · hueco = centro de la colonia o zona ({(shownListings.length - preciseL).toLocaleString("en-US")} propiedades, {shownRequests.length - preciseR} requerimientos, {(shownWa.length - preciseW).toLocaleString("en-US")} de WhatsApp) ·
+          sin ubicación: {data.missing.listings} propiedades, {data.missing.requests} requerimientos, {data.missing.wa} de WhatsApp (30 días)
         </span>
       </div>
       <div className="relative flex-1" style={{ minHeight: "calc(100vh - 140px)" }}>
@@ -355,3 +405,21 @@ function requestCard(r: MapRequest): string {
     <a href="/broker/${r.created_by}" style="color:#1c4588;font-size:12px">Ver asesor →</a>
   </div>`;
 }
+
+function waCard(w: MapWaDemand): string {
+  const t = w.property_type ? (TYPE_LABEL[w.property_type] ?? w.property_type) : "cualquier tipo";
+  const budget =
+    w.price || w.price_min
+      ? `${w.price_min ? money(w.price_min, "MXN") : "sin piso"} – ${w.price ? money(w.price, "MXN") : "sin tope"}`
+      : "sin presupuesto";
+  const where = w.precise ? esc(w.location) : `zona: ${esc(w.place)}`;
+  const when = new Date(w.captured_at).toLocaleDateString("es-MX", { timeZone: "America/Mexico_City", day: "numeric", month: "short" });
+  return `<div style="font:13px/1.35 system-ui;max-width:280px">
+    <div style="font-weight:600">WhatsApp${w.title ? ` · ${esc(w.title)}` : ""}</div>
+    <div>${t} en ${esc(w.operation ?? "—")} · ${budget}</div>
+    <div style="color:#6d28d9;font-size:12px">${where}</div>
+    <div style="color:#525252;margin-top:4px">${esc(w.group_name)} · ${esc(w.sender_name) || "sin nombre"} · ${when}</div>
+    <a href="/whatsapp" style="color:#1c4588;font-size:12px">Ver capturas →</a>
+  </div>`;
+}
+
