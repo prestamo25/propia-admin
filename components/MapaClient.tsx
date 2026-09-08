@@ -321,31 +321,26 @@ export function MapaClient({ data }: { data: MapData }) {
       {/* Toolbar: what to look at (left) · which layers (right). The legend and
           the fine print live on the map itself, bottom-left, out of the way. */}
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-neutral-200 bg-white px-4 py-2.5 text-sm">
-        <div className="flex flex-wrap items-center gap-2">
-        <select value={estado} onChange={(e) => setEstado(e.target.value)} className="h-9 rounded-lg border border-neutral-300 bg-white px-2.5">
-          <option value="">Todos los estados</option>
-          {data.states.map((s) => (
-            <option key={s} value={s}>{s}</option>
-          ))}
-        </select>
-        <div className="inline-flex h-9 overflow-hidden rounded-lg border border-neutral-300">
-          {(["todas", "venta", "renta"] as Op[]).map((o) => (
-            <button
-              key={o}
-              type="button"
-              onClick={() => setOp(o)}
-              className={`px-3 ${op === o ? "bg-neutral-900 text-white" : "bg-white text-neutral-700 hover:bg-neutral-50"}`}
-            >
-              {o === "todas" ? "Venta y renta" : o === "venta" ? "Venta" : "Renta"}
-            </button>
-          ))}
-        </div>
-        <select value={tipo} onChange={(e) => setTipo(e.target.value)} className="h-9 rounded-lg border border-neutral-300 bg-white px-2.5">
-          <option value="todos">Todos los tipos</option>
-          {tipos.map((t) => (
-            <option key={t} value={t}>{TYPE_LABEL[t] ?? t}</option>
-          ))}
-        </select>
+        {/* Filters share one tray: pill dropdowns and a light segmented
+            control, all the same height and radius as the layer pills. */}
+        <div className="inline-flex flex-wrap items-center gap-1 rounded-full bg-neutral-100 p-1">
+          <PillSelect value={estado} onChange={setEstado} options={[["", "Todos los estados"], ...data.states.map((s) => [s, s] as [string, string])]} />
+          <div className="inline-flex items-center rounded-full">
+            {(["todas", "venta", "renta"] as Op[]).map((o) => (
+              <button
+                key={o}
+                type="button"
+                onClick={() => setOp(o)}
+                aria-pressed={op === o}
+                className={`h-8 rounded-full px-3.5 text-sm font-medium transition ${
+                  op === o ? "bg-white text-neutral-900 shadow-sm" : "text-neutral-500 hover:text-neutral-900"
+                }`}
+              >
+                {o === "todas" ? "Todas" : o === "venta" ? "Venta" : "Renta"}
+              </button>
+            ))}
+          </div>
+          <PillSelect value={tipo} onChange={setTipo} options={[["todos", "Todos los tipos"], ...tipos.map((t) => [t, TYPE_LABEL[t] ?? t] as [string, string])]} />
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -413,6 +408,26 @@ export function MapaClient({ data }: { data: MapData }) {
         ) : null}
       </div>
     </div>
+  );
+}
+
+// A native <select> dressed as a pill: white, soft shadow, our own chevron.
+function PillSelect({ value, onChange, options }: { value: string; onChange: (v: string) => void; options: [string, string][] }) {
+  return (
+    <span className="relative inline-flex">
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="h-8 appearance-none rounded-full bg-white pl-3.5 pr-8 text-sm font-medium text-neutral-900 shadow-sm outline-none ring-brand/40 focus:ring-2"
+      >
+        {options.map(([v, label]) => (
+          <option key={v} value={v}>{label}</option>
+        ))}
+      </select>
+      <svg aria-hidden className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-neutral-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="m6 9 6 6 6-6" />
+      </svg>
+    </span>
   );
 }
 
