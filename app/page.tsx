@@ -2,6 +2,7 @@ import Link from "next/link";
 import { fetchInicio, type WeekMetric } from "@/lib/inicio";
 import { fetchPulse } from "@/lib/pulse";
 import { fetchServicios, type ServiceItem } from "@/lib/servicios";
+import { fetchGeoHealth, type GeoHealth } from "@/lib/geoHealth";
 import { fmtWhen } from "@/lib/eventos";
 import { TopNav } from "@/components/TopNav";
 import { LivePulse } from "@/components/LivePulse";
@@ -210,6 +211,49 @@ function ServiciosStrip({ items }: { items: ServiceItem[] }) {
   );
 }
 
+// Ubicación (P2-9, 2026-09-07): how well the network is located — captures
+// with a point/zone, requerimientos with at least one match INSIDE their
+// area, the review queue and unlocated properties. Read from the daily
+// snapshot (geo_health_daily), never computed on the fly.
+function GeoHealthStrip({ geo }: { geo: GeoHealth }) {
+  const when = new Date(geo.computedAt).toLocaleString("es-MX", {
+    timeZone: "America/Mexico_City",
+    weekday: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  return (
+    <section className="mt-8">
+      <div className="flex items-baseline justify-between">
+        <h2 className="text-sm font-semibold text-neutral-900">Ubicación</h2>
+        <span className="text-[11px] text-neutral-400">Calculado {when}</span>
+      </div>
+      <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {geo.items.map((it) => {
+          const inner = (
+            <>
+              <div className="flex items-center gap-2 text-xs text-neutral-500">
+                <span className={`h-2 w-2 rounded-full ${LEVEL_DOT[it.level]}`} />
+                {it.label}
+              </div>
+              <div className={`mt-1.5 text-lg font-semibold tabular-nums ${it.level === "down" ? "text-rose-700" : it.level === "warn" ? "text-amber-700" : "text-neutral-900"}`}>
+                {it.value}
+              </div>
+              <div className="mt-0.5 text-xs text-neutral-500">{it.detail}</div>
+            </>
+          );
+          const cls = "block rounded-2xl border border-black/[0.05] bg-white p-4 shadow-soft transition hover:-translate-y-0.5 hover:shadow-lift";
+          return it.href ? (
+            <Link key={it.key} href={it.href} className={cls}>{inner}</Link>
+          ) : (
+            <div key={it.key} className={cls}>{inner}</div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 function Delta7({ m }: { m: WeekMetric }) {
   const diff = m.now - m.prev;
   const pct = m.prev > 0 ? Math.round((diff / m.prev) * 100) : null;
@@ -249,8 +293,9 @@ export default async function InicioPage() {
   let data;
   let pulse;
   let servicios: ServiceItem[] = [];
+  let geo: GeoHealth | null = null;
   try {
-    [data, pulse, servicios] = await Promise.all([fetchInicio(), fetchPulse(), fetchServicios()]);
+    [data, pulse, servicios, geo] = await Promise.all([fetchInicio(), fetchPulse(), fetchServicios(), fetchGeoHealth()]);
   } catch (e) {
     return (
       <div className="min-h-screen">
@@ -356,6 +401,8 @@ export default async function InicioPage() {
         </section>
 
         <ServiciosStrip items={servicios} />
+
+        {geo ? <GeoHealthStrip geo={geo} /> : null}
 
         {/* standing totals of the whole network */}
         <section className="mt-8 grid grid-cols-2 gap-3 rounded-2xl border border-black/[0.05] bg-white/70 p-4 shadow-soft sm:grid-cols-4">
