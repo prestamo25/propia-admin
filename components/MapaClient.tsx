@@ -314,69 +314,96 @@ export function MapaClient({ data }: { data: MapData }) {
   const preciseR = shownRequests.filter((r) => r.precise).length;
   const preciseW = shownWa.filter((w) => w.precise).length;
 
+  const missingShown = data.missing;
+
   return (
     <div className="flex flex-1 flex-col">
-      <div className="flex flex-wrap items-center gap-2 border-b border-neutral-200 bg-white px-4 py-2 text-sm">
-        <select value={estado} onChange={(e) => setEstado(e.target.value)} className="rounded-md border border-neutral-300 px-2 py-1">
+      {/* Toolbar: what to look at (left) · which layers (right). The legend and
+          the fine print live on the map itself, bottom-left, out of the way. */}
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-neutral-200 bg-white px-4 py-2.5 text-sm">
+        <div className="flex flex-wrap items-center gap-2">
+        <select value={estado} onChange={(e) => setEstado(e.target.value)} className="h-9 rounded-lg border border-neutral-300 bg-white px-2.5">
           <option value="">Todos los estados</option>
           {data.states.map((s) => (
             <option key={s} value={s}>{s}</option>
           ))}
         </select>
-        <div className="inline-flex overflow-hidden rounded-md border border-neutral-300">
+        <div className="inline-flex h-9 overflow-hidden rounded-lg border border-neutral-300">
           {(["todas", "venta", "renta"] as Op[]).map((o) => (
             <button
               key={o}
               type="button"
               onClick={() => setOp(o)}
-              className={`px-3 py-1 ${op === o ? "bg-neutral-900 text-white" : "bg-white text-neutral-700 hover:bg-neutral-50"}`}
+              className={`px-3 ${op === o ? "bg-neutral-900 text-white" : "bg-white text-neutral-700 hover:bg-neutral-50"}`}
             >
               {o === "todas" ? "Venta y renta" : o === "venta" ? "Venta" : "Renta"}
             </button>
           ))}
         </div>
-        <select value={tipo} onChange={(e) => setTipo(e.target.value)} className="rounded-md border border-neutral-300 px-2 py-1">
+        <select value={tipo} onChange={(e) => setTipo(e.target.value)} className="h-9 rounded-lg border border-neutral-300 bg-white px-2.5">
           <option value="todos">Todos los tipos</option>
           {tipos.map((t) => (
             <option key={t} value={t}>{TYPE_LABEL[t] ?? t}</option>
           ))}
         </select>
-        <label className="ml-2 inline-flex items-center gap-1.5">
-          <input type="checkbox" checked={layers.listings} onChange={(e) => setLayers((l) => ({ ...l, listings: e.target.checked }))} />
-          <span className="inline-block h-3 w-3 rounded-full" style={{ background: COLOR.venta }} />
-          <span className="inline-block h-3 w-3 rounded-full" style={{ background: COLOR.renta }} />
-          Propiedades <span className="text-neutral-500">({shownListings.length.toLocaleString("en-US")})</span>
-        </label>
-        <label className="inline-flex items-center gap-1.5">
-          <input type="checkbox" checked={layers.requests} onChange={(e) => setLayers((l) => ({ ...l, requests: e.target.checked }))} />
-          <span className="inline-block h-3 w-3 rotate-45" style={{ background: COLOR.req }} />
-          Requerimientos <span className="text-neutral-500">({shownRequests.length.toLocaleString("en-US")})</span>
-        </label>
-        <label className="inline-flex items-center gap-1.5">
-          <input type="checkbox" checked={layers.wa} onChange={(e) => setLayers((l) => ({ ...l, wa: e.target.checked }))} />
-          <span className="inline-block h-3 w-3 rotate-45" style={{ background: COLOR.wa }} />
-          Requerimientos <WaGlyph /> <span className="text-neutral-500">({shownWa.length.toLocaleString("en-US")})</span>
-        </label>
-        <label className="inline-flex items-center gap-1.5">
-          <input type="checkbox" checked={onlyPrecise} onChange={(e) => setOnlyPrecise(e.target.checked)} />
-          Sólo con punto exacto
-        </label>
-        <label className="inline-flex items-center gap-1.5 rounded-md bg-amber-50 px-2 py-0.5 text-amber-800">
-          <input type="checkbox" checked={testOnly} onChange={(e) => setTestOnly(e.target.checked)} />
-          Sólo Pablo y yo (pruebas)
-        </label>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <LayerChip
+            on={layers.listings}
+            onClick={() => setLayers((l) => ({ ...l, listings: !l.listings }))}
+            label="Propiedades"
+            count={shownListings.length}
+            swatch={
+              <span className="inline-flex -space-x-1">
+                <span className="inline-block h-3 w-3 rounded-full ring-2 ring-white" style={{ background: COLOR.venta }} />
+                <span className="inline-block h-3 w-3 rounded-full ring-2 ring-white" style={{ background: COLOR.renta }} />
+              </span>
+            }
+          />
+          <LayerChip
+            on={layers.requests}
+            onClick={() => setLayers((l) => ({ ...l, requests: !l.requests }))}
+            label="Requerimientos"
+            count={shownRequests.length}
+            swatch={<span className="inline-block h-2.5 w-2.5 rotate-45" style={{ background: COLOR.req }} />}
+          />
+          <LayerChip
+            on={layers.wa}
+            onClick={() => setLayers((l) => ({ ...l, wa: !l.wa }))}
+            label="Solicitudes"
+            count={shownWa.length}
+            title="Requerimientos capturados de los grupos de WhatsApp"
+            swatch={<WaGlyph size={15} />}
+          />
+          <span className="mx-1 hidden h-6 w-px bg-neutral-200 sm:inline-block" />
+          <FilterChip on={onlyPrecise} onClick={() => setOnlyPrecise((v) => !v)} label="Punto exacto" title="Sólo lo que tiene un punto exacto, sin centros de colonia" />
+          <FilterChip on={testOnly} onClick={() => setTestOnly((v) => !v)} label="Pruebas" tone="amber" title="Sólo lo que subimos Pablo y yo para probar" />
+        </div>
         {gError ? (
           <span className="rounded bg-rose-50 px-2 py-0.5 text-xs font-medium text-rose-700">
             Google: {gError}
           </span>
         ) : null}
-        <span className="ml-auto text-xs text-neutral-500">
-          Relleno = punto exacto · hueco = centro de la colonia o zona ({(shownListings.length - preciseL).toLocaleString("en-US")} propiedades, {shownRequests.length - preciseR} requerimientos, {(shownWa.length - preciseW).toLocaleString("en-US")} de WhatsApp) ·
-          sin ubicación: {data.missing.listings} propiedades, {data.missing.requests} requerimientos, {data.missing.wa} de WhatsApp (30 días)
-        </span>
       </div>
       <div className="relative flex-1" style={{ minHeight: "calc(100vh - 140px)" }}>
         <div ref={mapEl} className="absolute inset-0" />
+        {ready ? (
+          <div className="pointer-events-none absolute bottom-6 left-3 z-10 rounded-xl border border-black/[0.06] bg-white/95 px-3 py-2 text-[11px] leading-4 text-neutral-600 shadow-soft backdrop-blur">
+            <div className="mb-1 flex items-center gap-3 text-neutral-700">
+              <span className="inline-flex items-center gap-1"><span className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: COLOR.venta }} /> punto exacto</span>
+              <span className="inline-flex items-center gap-1"><span className="inline-block h-2.5 w-2.5 rounded-full border-2 bg-white" style={{ borderColor: COLOR.venta }} /> centro de colonia o zona</span>
+            </div>
+            <table className="tabular-nums">
+              <tbody>
+                <tr className="text-neutral-400"><td className="pr-3" /><td className="pr-3 text-right">en mapa</td><td className="pr-3 text-right">por centro</td><td className="text-right">sin ubicación</td></tr>
+                <LegendRow label="Propiedades" shown={shownListings.length} hollow={shownListings.length - preciseL} missing={missingShown.listings} />
+                <LegendRow label="Requerimientos" shown={shownRequests.length} hollow={shownRequests.length - preciseR} missing={missingShown.requests} />
+                <LegendRow label="Solicitudes (30 días)" shown={shownWa.length} hollow={shownWa.length - preciseW} missing={missingShown.wa} />
+              </tbody>
+            </table>
+          </div>
+        ) : null}
         {!KEY || authFail ? (
           <div className="absolute inset-0 flex items-center justify-center bg-neutral-50 p-8 text-center text-sm text-neutral-600">
             El mapa necesita la llave de Google Maps del navegador (<code className="rounded bg-neutral-100 px-1">NEXT_PUBLIC_GOOGLE_MAPS_KEY</code>) — la misma de Zonas.
@@ -386,6 +413,56 @@ export function MapaClient({ data }: { data: MapData }) {
         ) : null}
       </div>
     </div>
+  );
+}
+
+// A layer is a pill you press, not a checkbox: its swatch is the legend, its
+// count says what the current filters left on the map.
+function LayerChip({ on, onClick, label, count, swatch, title }: { on: boolean; onClick: () => void; label: string; count: number; swatch: React.ReactNode; title?: string }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={on}
+      title={title}
+      className={`inline-flex h-9 items-center gap-1.5 rounded-full border px-2.5 text-sm font-medium transition ${
+        on ? "border-neutral-300 bg-white text-neutral-900 shadow-sm" : "border-transparent bg-neutral-100 text-neutral-400"
+      }`}
+    >
+      <span className={on ? "" : "opacity-40 grayscale"}>{swatch}</span>
+      {label}
+      <span className={`tabular-nums ${on ? "text-neutral-500" : "text-neutral-400"}`}>{count.toLocaleString("en-US")}</span>
+    </button>
+  );
+}
+
+function FilterChip({ on, onClick, label, title, tone = "neutral" }: { on: boolean; onClick: () => void; label: string; title?: string; tone?: "neutral" | "amber" }) {
+  const onCls = tone === "amber" ? "border-amber-300 bg-amber-50 text-amber-800" : "border-neutral-900 bg-neutral-900 text-white";
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={on}
+      title={title}
+      className={`inline-flex h-9 items-center gap-1.5 rounded-full border px-3 text-sm font-medium transition ${
+        on ? onCls : "border-neutral-300 bg-white text-neutral-600 hover:bg-neutral-50"
+      }`}
+    >
+      {on ? <span aria-hidden>✓</span> : null}
+      {label}
+    </button>
+  );
+}
+
+function LegendRow({ label, shown, hollow, missing }: { label: string; shown: number; hollow: number; missing: number }) {
+  const n = (v: number) => v.toLocaleString("en-US");
+  return (
+    <tr>
+      <td className="pr-3 text-neutral-700">{label}</td>
+      <td className="pr-3 text-right">{n(shown)}</td>
+      <td className="pr-3 text-right">{n(hollow)}</td>
+      <td className="text-right">{n(missing)}</td>
+    </tr>
   );
 }
 
