@@ -87,6 +87,10 @@ const TEST_OWNER_IDS = [
   "fb561d43-ae89-4d96-b045-046edaad2eb3",
   "15fef8d4-0384-4d50-89c5-059c93e9003d",
 ];
+// Phones whose group messages count as ours in «Sólo Pablo y yo» (Franz
+// 2026-09-07: «in the test i want also my number»), on top of the phones on
+// the accounts above. Last 10 digits.
+const TEST_PHONES = ["2441016656", "2211886673"];
 
 type PropRow = {
   id: string; name: string | null; price: number | null; currency: string | null;
@@ -154,7 +158,10 @@ export async function fetchMapData(): Promise<MapData> {
   };
   const { data: testUsers, error: tuErr } = await sb.from("users").select("id, phone").in("id", TEST_OWNER_IDS);
   if (tuErr) throw new Error(tuErr.message);
-  const testPhones = ((testUsers ?? []) as { phone: string | null }[]).map((u) => last10(u.phone)).filter((x): x is string => !!x);
+  const testPhones = Array.from(new Set([
+    ...TEST_PHONES,
+    ...((testUsers ?? []) as { phone: string | null }[]).map((u) => last10(u.phone)).filter((x): x is string => !!x),
+  ]));
 
   // Centroids for the colonia-only rows (one RPC, service role only).
   const keys = new Set<string>();
