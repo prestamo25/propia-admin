@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { PillSearch, PillSegment, PillTray, Toolbar, ToolbarDivider } from "@/components/Pills";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { BrokerRow } from "@/lib/data";
@@ -50,9 +51,12 @@ function statusMeta(status: string | null) {
 export function BrokerTable({
   brokers,
   initialQuery = "",
+  stats,
 }: {
   brokers: BrokerRow[];
   initialQuery?: string;
+  /** The stat cards the page renders above the table, under the toolbar. */
+  stats?: React.ReactNode;
 }) {
   const router = useRouter();
   const [query, setQuery] = useState(initialQuery);
@@ -106,71 +110,40 @@ export function BrokerTable({
     }
   }
 
+  const n = (v: number) => v.toLocaleString("en-US");
+
   return (
-    <div className="overflow-hidden rounded-2xl border border-black/[0.05] bg-white/90 shadow-soft backdrop-blur-sm">
-      {/* Tier tabs: everyone / asesores / proveedores de servicios / clientes */}
-      <div className="flex items-center gap-1 overflow-x-auto border-b border-neutral-100 px-4 py-2.5">
-        {(
-          [
-            ["todos", "Todos"],
-            ["asesor", "Asesores"],
-            ["servicios", "Servicios"],
-            ["cliente", "Clientes"],
-            ["invitado", "Invitados"],
-          ] as const
-        ).map(([key, label]) => (
-          <button
-            key={key}
-            onClick={() => setTier(key)}
-            className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium transition ${
-              tier === key
-                ? "bg-brand text-white shadow-sm"
-                : "text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800"
-            }`}
-          >
-            {label}
-            <span
-              className={`text-xs tabular-nums ${
-                tier === key ? "text-white/60" : "text-neutral-400"
-              }`}
-            >
-              {tierCounts[key]}
-            </span>
-          </button>
-        ))}
-      </div>
-
-      {/* Toolbar */}
-      <div className="flex items-center justify-between gap-3 border-b border-neutral-100 px-4 py-3">
-        <div className="relative w-full max-w-xs">
-          <svg
-            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400"
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-          >
-            <circle cx="11" cy="11" r="7" />
-            <path d="m21 21-4.3-4.3" />
-          </svg>
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Buscar miembro, teléfono, estado…"
-            className="w-full rounded-lg border border-neutral-200 bg-neutral-50/60 py-2 pl-9 pr-3 text-sm text-neutral-900 outline-none transition focus:border-brand focus:bg-white focus:ring-4 focus:ring-brand/10"
+    <div className="flex flex-1 flex-col">
+      {/* Same toolbar as Mapa and Eventos: who to look at (left) · search + export (right). */}
+      <Toolbar>
+        <PillTray>
+          <PillSegment
+            value={tier}
+            onChange={setTier}
+            options={[
+              ["todos", `Todos · ${n(tierCounts.todos)}`],
+              ["asesor", `Asesores · ${n(tierCounts.asesor)}`],
+              ["servicios", `Servicios · ${n(tierCounts.servicios)}`],
+              ["cliente", `Clientes · ${n(tierCounts.cliente)}`],
+              ["invitado", `Invitados · ${n(tierCounts.invitado)}`],
+            ]}
           />
-        </div>
-        <div className="flex shrink-0 items-center gap-3">
-          <span className="hidden text-sm tabular-nums text-neutral-400 sm:inline">
-            {rows.length} {rows.length === 1 ? "miembro" : "miembros"}
-          </span>
-          <ExcelButton query={query} count={rows.length} />
-        </div>
-      </div>
+        </PillTray>
 
+        <div className="flex flex-wrap items-center gap-2">
+          <PillSearch value={query} onChange={setQuery} placeholder="Buscar miembro, teléfono, estado…" />
+          <ExcelButton query={query} count={rows.length} />
+          <ToolbarDivider />
+          <span className="hidden text-sm text-neutral-500 sm:inline">
+            <span className="font-semibold tabular-nums text-neutral-900">{n(rows.length)}</span>{" "}
+            {rows.length === 1 ? "miembro" : "miembros"}
+          </span>
+        </div>
+      </Toolbar>
+
+      <main className="mx-auto w-full max-w-7xl px-4 py-5 sm:px-6">
+        {stats}
+        <div className="overflow-hidden rounded-2xl border border-black/[0.05] bg-white/90 shadow-soft backdrop-blur-sm">
       {/* Phones: stacked cards (the 10-column table can't breathe at 390px). */}
       <ul className="divide-y divide-neutral-50 md:hidden">
         {rows.map((b) => {
@@ -263,7 +236,7 @@ export function BrokerTable({
               {/* Every other column carries a width, so the name column is the
                   one that flexes — otherwise it swallows the slack and pushes
                   the numbers off a laptop screen. */}
-              <Th sortKey="name" active={sortKey} dir={sortDir} onSort={toggleSort}>
+              <Th sortKey="name" active={sortKey} dir={sortDir} onSort={toggleSort} className="min-w-[16rem]">
                 Miembro
               </Th>
               <Th className="w-28">Teléfono</Th>
@@ -306,7 +279,10 @@ export function BrokerTable({
                   onClick={() => router.push(`/broker/${b.id}`)}
                   className="group cursor-pointer border-b border-neutral-50 transition-colors last:border-0 hover:bg-neutral-50/70"
                 >
-                  <Td className="max-w-0">
+                  {/* min-w floors the name column so the fixed-width stat
+                      columns can never squeeze it to a letter; max-w-0 keeps
+                      the truncation working above that floor. */}
+                  <Td className="min-w-[16rem] max-w-0">
                     <div className="flex items-center gap-3">
                       {b.avatar_url ? (
                         // eslint-disable-next-line @next/next/no-img-element
@@ -399,7 +375,7 @@ export function BrokerTable({
                   <Td>
                     <Platforms list={b.platforms} />
                   </Td>
-                  <Td className="hidden 2xl:table-cell">
+                  <Td className="hidden whitespace-nowrap 2xl:table-cell">
                     <span className="text-xs text-neutral-500">
                       {fmtDate(b.created_at)}
                     </span>
@@ -456,6 +432,9 @@ export function BrokerTable({
           </tbody>
         </table>
       </div>
+        </div>
+        <p className="mt-4 text-xs text-neutral-400">MB = almacenamiento en R2 (pendiente de conectar).</p>
+      </main>
     </div>
   );
 }
@@ -555,7 +534,7 @@ function ExcelButton({ query, count }: { query: string; count: number }) {
             ? `Descargar los ${count} brokers de esta búsqueda`
             : "Descargar todos los brokers (nombre, teléfono, email)"
         }
-        className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-brand ring-1 ring-inset ring-brand/20 transition hover:bg-brand-light disabled:opacity-40"
+        className="inline-flex h-9 items-center gap-1.5 rounded-full border border-brand/25 bg-white px-3 text-sm font-medium text-brand shadow-sm transition hover:bg-brand-light disabled:opacity-40"
       >
         {busy ? (
           <svg

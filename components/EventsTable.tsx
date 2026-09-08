@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { FilterChip, PillSearch, PillSegment, PillSelect, PillTray, Toolbar, ToolbarDivider } from "@/components/Pills";
 import {
   EVENT_TYPE_LABEL,
   MODALITY_LABEL,
@@ -69,65 +70,61 @@ export function EventsTable({ events }: { events: EventRow[] }) {
     return { proximos, pasados };
   }, [events, state, privateOnly, now]);
 
-  return (
-    <section className="rounded-2xl bg-white shadow-sm ring-1 ring-black/[0.05]">
-      <div className="flex flex-col gap-3 border-b border-black/[0.05] p-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="inline-flex rounded-xl bg-neutral-100 p-1">
-            {(
-              [
-                ["proximos", `Próximos (${counts.proximos})`],
-                ["pasados", `Pasados (${counts.pasados})`],
-              ] as [When, string][]
-            ).map(([k, label]) => (
-              <button
-                key={k}
-                type="button"
-                onClick={() => setWhen(k)}
-                className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${
-                  when === k ? "bg-white text-brand shadow-sm" : "text-neutral-500 hover:text-neutral-800"
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-          <select
-            value={state}
-            onChange={(e) => setState(e.target.value)}
-            className="rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-sm text-neutral-700 shadow-sm focus:border-brand focus:outline-none"
-            aria-label="Estado"
-          >
-            <option value="todos">Todos los estados</option>
-            {states.map((s) => (
-              <option key={s.key} value={s.key}>
-                {s.label} ({s.n})
-              </option>
-            ))}
-          </select>
-          <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-sm text-neutral-700 shadow-sm">
-            <input
-              type="checkbox"
-              checked={privateOnly}
-              onChange={(e) => setPrivateOnly(e.target.checked)}
-              className="h-3.5 w-3.5 accent-brand"
-            />
-            Solo privados
-          </label>
-        </div>
-        <input
-          type="search"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Buscar evento u organizador"
-          className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-sm shadow-sm focus:border-brand focus:outline-none sm:w-72"
-        />
-      </div>
+  // Whole-network totals, untouched by the filters: the quiet numbers on the
+  // right of the toolbar, where Mapa keeps its legend counts.
+  const totals = useMemo(() => {
+    let privados = 0;
+    let seats = 0;
+    let attended = 0;
+    for (const e of events) {
+      if (e.visibility === "private") privados++;
+      seats += e.counts.registered;
+      attended += e.counts.attended;
+    }
+    return { privados, seats, attended };
+  }, [events]);
+  const n = (v: number) => v.toLocaleString("en-US");
 
-      {rows.length === 0 ? (
-        <p className="p-8 text-center text-sm text-neutral-500">Sin eventos con estos filtros.</p>
-      ) : (
-        <div className="overflow-x-auto">
+  return (
+    <div className="flex flex-1 flex-col">
+      {/* Same toolbar as Mapa: what to look at (left) · which slice (right). */}
+      <Toolbar>
+        <PillTray>
+          <PillSegment
+            value={when}
+            onChange={setWhen}
+            options={[
+              ["proximos", `Próximos · ${n(counts.proximos)}`],
+              ["pasados", `Pasados · ${n(counts.pasados)}`],
+            ]}
+          />
+          <PillSelect
+            value={state}
+            onChange={setState}
+            ariaLabel="Estado"
+            options={[["todos", "Todos los estados"], ...states.map((s) => [s.key, `${s.label} (${s.n})`] as [string, string])]}
+          />
+        </PillTray>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <FilterChip on={privateOnly} onClick={() => setPrivateOnly((v) => !v)} label="Privados" count={totals.privados} title="Sólo los eventos privados" />
+          <PillSearch value={query} onChange={setQuery} placeholder="Buscar evento u organizador" />
+          <ToolbarDivider />
+          <span className="hidden text-sm text-neutral-500 sm:inline">
+            <span className="font-semibold tabular-nums text-neutral-900">{n(events.length)}</span> eventos
+            <span className="mx-1.5 text-neutral-300">·</span>
+            <span className="font-semibold tabular-nums text-neutral-900">{n(totals.attended)}</span> asistencias de{" "}
+            <span className="tabular-nums">{n(totals.seats)}</span> inscritos
+          </span>
+        </div>
+      </Toolbar>
+
+      <main className="mx-auto w-full max-w-7xl px-4 py-5 sm:px-6">
+        <section className="rounded-2xl bg-white shadow-sm ring-1 ring-black/[0.05]">
+          {rows.length === 0 ? (
+            <p className="p-8 text-center text-sm text-neutral-500">Sin eventos con estos filtros.</p>
+          ) : (
+        <div className="overflow-x-auto rounded-2xl">
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-xs uppercase tracking-wide text-neutral-400">
@@ -203,7 +200,9 @@ export function EventsTable({ events }: { events: EventRow[] }) {
             </tbody>
           </table>
         </div>
-      )}
-    </section>
+          )}
+        </section>
+      </main>
+    </div>
   );
 }

@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { importLibrary, setOptions } from "@googlemaps/js-api-loader";
 import { MarkerClusterer, type Cluster } from "@googlemaps/markerclusterer";
 import type { MapData, MapListing, MapRequest, MapWaDemand } from "@/lib/mapa";
+import { FilterChip, PillSegment, PillSelect, PillTray, Toolbar, ToolbarDivider } from "@/components/Pills";
 
 // Same browser key and loader as the zonas bench (ZonaMap.tsx). The map is
 // created ONCE; filters only swap markers in and out of the clusterer, so a
@@ -321,28 +322,14 @@ export function MapaClient({ data }: { data: MapData }) {
     <div className="flex flex-1 flex-col">
       {/* Toolbar: what to look at (left) · which layers (right). The legend and
           the fine print live on the map itself, bottom-left, out of the way. */}
-      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-neutral-200 bg-white px-4 py-2.5 text-sm">
+      <Toolbar>
         {/* Filters share one tray: pill dropdowns and a light segmented
             control, all the same height and radius as the layer pills. */}
-        <div className="inline-flex flex-wrap items-center gap-1 rounded-full bg-neutral-100 p-1">
+        <PillTray>
           <PillSelect value={estado} onChange={setEstado} options={[["", "Todos los estados"], ...data.states.map((s) => [s, s] as [string, string])]} />
-          <div className="inline-flex items-center rounded-full">
-            {(["todas", "venta", "renta"] as Op[]).map((o) => (
-              <button
-                key={o}
-                type="button"
-                onClick={() => setOp(o)}
-                aria-pressed={op === o}
-                className={`h-8 rounded-full px-3.5 text-sm font-medium transition ${
-                  op === o ? "bg-white text-neutral-900 shadow-sm" : "text-neutral-500 hover:text-neutral-900"
-                }`}
-              >
-                {o === "todas" ? "Todas" : o === "venta" ? "Venta" : "Renta"}
-              </button>
-            ))}
-          </div>
+          <PillSegment value={op} onChange={setOp} options={[["todas", "Todas"], ["venta", "Venta"], ["renta", "Renta"]]} />
           <PillSelect value={tipo} onChange={setTipo} options={[["todos", "Todos los tipos"], ...tipos.map((t) => [t, TYPE_LABEL[t] ?? t] as [string, string])]} />
-        </div>
+        </PillTray>
 
         <div className="flex flex-wrap items-center gap-2">
           <LayerChip
@@ -372,7 +359,7 @@ export function MapaClient({ data }: { data: MapData }) {
             title="Requerimientos capturados de los grupos de WhatsApp"
             swatch={<WaGlyph size={15} />}
           />
-          <span className="mx-1 hidden h-6 w-px bg-neutral-200 sm:inline-block" />
+          <ToolbarDivider />
           <FilterChip on={onlyPrecise} onClick={() => setOnlyPrecise((v) => !v)} label="Punto exacto" title="Sólo lo que tiene un punto exacto, sin centros de colonia" />
           <FilterChip on={testOnly} onClick={() => setTestOnly((v) => !v)} label="Pruebas" tone="amber" title="Sólo lo que subimos Pablo y yo para probar" />
         </div>
@@ -381,7 +368,7 @@ export function MapaClient({ data }: { data: MapData }) {
             Google: {gError}
           </span>
         ) : null}
-      </div>
+      </Toolbar>
       <div className="relative flex-1" style={{ minHeight: "calc(100vh - 140px)" }}>
         <div ref={mapEl} className="absolute inset-0" />
         {ready ? (
@@ -412,26 +399,6 @@ export function MapaClient({ data }: { data: MapData }) {
   );
 }
 
-// A native <select> dressed as a pill: white, soft shadow, our own chevron.
-function PillSelect({ value, onChange, options }: { value: string; onChange: (v: string) => void; options: [string, string][] }) {
-  return (
-    <span className="relative inline-flex">
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="h-8 appearance-none rounded-full bg-white pl-3.5 pr-8 text-sm font-medium text-neutral-900 shadow-sm outline-none ring-brand/40 focus:ring-2"
-      >
-        {options.map(([v, label]) => (
-          <option key={v} value={v}>{label}</option>
-        ))}
-      </select>
-      <svg aria-hidden className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-neutral-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-        <path d="m6 9 6 6 6-6" />
-      </svg>
-    </span>
-  );
-}
-
 // A layer is a pill you press, not a checkbox: its swatch is the legend, its
 // count says what the current filters left on the map.
 function LayerChip({ on, onClick, label, count, swatch, title }: { on: boolean; onClick: () => void; label: string; count: number; swatch: React.ReactNode; title?: string }) {
@@ -448,24 +415,6 @@ function LayerChip({ on, onClick, label, count, swatch, title }: { on: boolean; 
       <span className={on ? "" : "opacity-40 grayscale"}>{swatch}</span>
       {label}
       <span className={`tabular-nums ${on ? "text-neutral-500" : "text-neutral-400"}`}>{count.toLocaleString("en-US")}</span>
-    </button>
-  );
-}
-
-function FilterChip({ on, onClick, label, title, tone = "neutral" }: { on: boolean; onClick: () => void; label: string; title?: string; tone?: "neutral" | "amber" }) {
-  const onCls = tone === "amber" ? "border-amber-300 bg-amber-50 text-amber-800" : "border-neutral-900 bg-neutral-900 text-white";
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={on}
-      title={title}
-      className={`inline-flex h-9 items-center gap-1.5 rounded-full border px-3 text-sm font-medium transition ${
-        on ? onCls : "border-neutral-300 bg-white text-neutral-600 hover:bg-neutral-50"
-      }`}
-    >
-      {on ? <span aria-hidden>✓</span> : null}
-      {label}
     </button>
   );
 }
