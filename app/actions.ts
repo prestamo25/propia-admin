@@ -55,6 +55,41 @@ export async function approveUser(id: string): Promise<Result> {
   return {};
 }
 
+// Premium plan by hand (premium-plan-2026-09-08): Pablo's manual sales and
+// courtesies. set_user_plan() is the one writer (service_role only) and logs
+// to plan_events with who did it; a store/Stripe purchase later overwrites
+// this through RevenueCat's webhook, which is the intended precedence.
+export async function setUserPlan(
+  id: string,
+  plan: "free" | "premium",
+  expiresAt: string | null,
+  source: "manual" | "promotional" = "manual",
+): Promise<Result> {
+  if (!id) return { error: "Falta el id." };
+  if (plan !== "free" && plan !== "premium") return { error: "Plan inválido." };
+  let expires: string | null = null;
+  if (plan === "premium" && expiresAt) {
+    const d = new Date(expiresAt);
+    if (Number.isNaN(d.getTime())) return { error: "Fecha inválida." };
+    // End of that day, CDMX (UTC-6): «hasta el 30 de septiembre» includes it.
+    expires = new Date(`${expiresAt}T23:59:59-06:00`).toISOString();
+  }
+  const sb = supabaseAdmin();
+  const { error } = await sb.rpc("set_user_plan", {
+    p_user: id,
+    p_plan: plan,
+    p_expires_at: expires,
+    p_source: plan === "premium" ? source : null,
+    p_kind: "manual",
+    p_actor: await reviewer(),
+    p_product_id: null,
+    p_raw: null,
+  });
+  if (error) return { error: error.message };
+  revalidatePath(`/broker/${id}`);
+  return {};
+}
+
 // Approve AS another type (Franz 2026-09-03): people pick the wrong category
 // — a valuador under «Otros», a loan seeker under «Créditos», a company that
 // isn't a real-estate service at all. Invitado is the common case (eventos +

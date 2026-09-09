@@ -68,6 +68,12 @@ export type Dossier = {
   whatsapp_opt_in: boolean;
   profile_type: string;
   profile_data: Record<string, unknown> | null;
+  // Paid tier (premium-plan-2026-09-08): free | premium, optional expiry.
+  plan: "free" | "premium";
+  plan_expires_at: string | null;
+  plan_source: string | null;
+  // premium AND not expired — decided here (data), not in render.
+  plan_active: boolean;
   platforms: string[];
   last_sign_in_at: string | null;
   counts: {
@@ -117,7 +123,7 @@ export async function fetchMemberDossier(id: string): Promise<Dossier | null> {
   ] = await Promise.all([
     sb
       .from("users")
-      .select("email, zonas, bio, instagram, facebook, whatsapp_opt_in, profile_type, profile_data")
+      .select("email, zonas, bio, instagram, facebook, whatsapp_opt_in, profile_type, profile_data, plan, plan_expires_at, plan_source")
       .eq("id", id)
       .maybeSingle(),
     sb.auth.admin.getUserById(id),
@@ -182,6 +188,9 @@ export async function fetchMemberDossier(id: string): Promise<Dossier | null> {
     whatsapp_opt_in?: boolean | null;
     profile_type?: string | null;
     profile_data?: Record<string, unknown> | null;
+    plan?: string | null;
+    plan_expires_at?: string | null;
+    plan_source?: string | null;
   };
 
   // Counterparties (contacts + vínculos) resolve in one lookup.
@@ -300,6 +309,11 @@ export async function fetchMemberDossier(id: string): Promise<Dossier | null> {
     whatsapp_opt_in: Boolean(u.whatsapp_opt_in),
     profile_type: u.profile_type ?? "asesor",
     profile_data: u.profile_data ?? null,
+    plan: u.plan === "premium" ? "premium" : "free",
+    plan_expires_at: u.plan_expires_at ?? null,
+    plan_source: u.plan_source ?? null,
+    plan_active:
+      u.plan === "premium" && (!u.plan_expires_at || new Date(u.plan_expires_at).getTime() > Date.now()),
     platforms: [...platformSet].sort(),
     last_sign_in_at: authRes.data?.user?.last_sign_in_at ?? null,
     counts: {

@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { fetchMemberDossier, type Person } from "@/lib/miembro";
 import type { Listing } from "@/lib/data";
 import { BlockButton } from "@/components/BlockButton";
+import { PlanControl } from "@/components/PlanControl";
 import { avatarColors, fmtDate, initials, relative } from "@/lib/format";
 import { profileDetails, profileTypeLabel, tierOf } from "@/lib/profileTypes";
 import { ATTENDEE_STATUS_LABEL, fmtStamp, fmtWhen } from "@/lib/eventos";
@@ -234,8 +235,15 @@ export default async function BrokerPage({ params }: { params: Promise<{ id: str
                 ))}
               </dl>
             </div>
-            <div className="shrink-0">
+            <div className="flex shrink-0 flex-col items-end gap-3">
               <BlockButton id={broker.id} name={broker.name} blocked={broker.blocked} size="md" />
+              <PlanControl
+                id={broker.id}
+                plan={d.plan}
+                expiresAt={d.plan_expires_at}
+                source={d.plan_source}
+                active={d.plan_active}
+              />
             </div>
           </div>
         </div>
