@@ -24,6 +24,10 @@ export type BrokerRow = {
   blocked: boolean;
   // users.profile_type — 'asesor' | 'cliente' | one of the 9 service types.
   profile_type: string;
+  // Paid tier: premium AND not expired (the list badge + «Premium» filter).
+  premium: boolean;
+  plan_source: string | null;
+  plan_expires_at: string | null;
   // Activity numbers (Franz 2026-09-02): is this member actually working the
   // network? Open requerimientos, accepted contacts, events they were scanned
   // into, fichas sent to clients and the verified opens those got, and the
@@ -64,7 +68,7 @@ export async function fetchOverview(): Promise<Overview> {
       sb
         .from("users")
         .select(
-          "id, name, first_name, last_name, company, phone, email, states, status, created_at, last_active, avatar_url, whatsapp_opt_in, profile_type",
+          "id, name, first_name, last_name, company, phone, email, states, status, created_at, last_active, avatar_url, whatsapp_opt_in, profile_type, plan, plan_expires_at, plan_source",
         )
         .order("created_at", { ascending: false }),
     ),
@@ -132,6 +136,9 @@ export async function fetchOverview(): Promise<Overview> {
       avatar_url: string | null;
       whatsapp_opt_in: boolean | null;
       profile_type: string | null;
+      plan?: string | null;
+      plan_expires_at?: string | null;
+      plan_source?: string | null;
     };
     const full =
       [row.first_name, row.last_name].filter(Boolean).join(" ").trim() ||
@@ -153,6 +160,9 @@ export async function fetchOverview(): Promise<Overview> {
       mb_used: null,
       blocked: banned.get(row.id) ?? false,
       profile_type: row.profile_type ?? "asesor",
+      premium: row.plan === "premium" && (!row.plan_expires_at || new Date(row.plan_expires_at).getTime() > Date.now()),
+      plan_source: row.plan_source ?? null,
+      plan_expires_at: row.plan_expires_at ?? null,
       requests: requests.get(row.id) ?? 0,
       contacts: contacts.get(row.id) ?? 0,
       events_attended: attended.get(row.id) ?? 0,

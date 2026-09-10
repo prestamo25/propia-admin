@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { fetchMemberDossier, type Person } from "@/lib/miembro";
 import type { Listing } from "@/lib/data";
 import { BlockButton } from "@/components/BlockButton";
-import { PlanControl } from "@/components/PlanControl";
+import { PlanCard } from "@/components/PlanCard";
 import { avatarColors, fmtDate, initials, relative } from "@/lib/format";
 import { profileDetails, profileTypeLabel, tierOf } from "@/lib/profileTypes";
 import { ATTENDEE_STATUS_LABEL, fmtStamp, fmtWhen } from "@/lib/eventos";
@@ -237,13 +237,11 @@ export default async function BrokerPage({ params }: { params: Promise<{ id: str
             </div>
             <div className="flex shrink-0 flex-col items-end gap-3">
               <BlockButton id={broker.id} name={broker.name} blocked={broker.blocked} size="md" />
-              <PlanControl
-                id={broker.id}
-                plan={d.plan}
-                expiresAt={d.plan_expires_at}
-                source={d.plan_source}
-                active={d.plan_active}
-              />
+              {d.plan_active ? (
+                <a href="#plan" className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800 ring-1 ring-inset ring-amber-200">
+                  <span aria-hidden>★</span> Premium
+                </a>
+              ) : null}
             </div>
           </div>
         </div>
@@ -257,6 +255,21 @@ export default async function BrokerPage({ params }: { params: Promise<{ id: str
           <Stat label="Fichas enviadas" value={d.counts.sends} />
           <Stat label="Aperturas" value={d.counts.opens} sub="de sus fichas" />
         </section>
+
+        {/* Plan (paid tier) — state, one action, history. */}
+        <div id="plan">
+          <Section title="Plan">
+            <PlanCard
+              id={broker.id}
+              name={broker.name}
+              plan={d.plan}
+              expiresAt={d.plan_expires_at}
+              source={d.plan_source}
+              active={d.plan_active}
+              events={d.planEvents}
+            />
+          </Section>
+        </div>
 
         {/* Inventory */}
         <Section title="Inventario" count={broker.listings.length}>

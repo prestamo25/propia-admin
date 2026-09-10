@@ -58,6 +58,18 @@ export type Person = {
 
 export type ActivityItem = { at: string; kind: string; label: string; href?: string };
 
+export type PlanEvent = {
+  id: number;
+  kind: string;
+  plan: "free" | "premium";
+  expires_at: string | null;
+  source: string | null;
+  actor: string | null;
+  product_id: string | null;
+  raw: Record<string, unknown> | null;
+  created_at: string;
+};
+
 export type Dossier = {
   broker: BrokerDetail;
   email: string | null;
@@ -74,6 +86,9 @@ export type Dossier = {
   plan_source: string | null;
   // premium AND not expired — decided here (data), not in render.
   plan_active: boolean;
+  // Audit trail (plan_events): purchases, renewals, OXXO, courtesies,
+  // removals — newest first. Shown under the Plan card.
+  planEvents: PlanEvent[];
   platforms: string[];
   last_sign_in_at: string | null;
   counts: {
@@ -120,6 +135,7 @@ export async function fetchMemberDossier(id: string): Promise<Dossier | null> {
     reportsReceived,
     blocksMade,
     blockedBy,
+    planEventsRes,
   ] = await Promise.all([
     sb
       .from("users")
@@ -177,6 +193,12 @@ export async function fetchMemberDossier(id: string): Promise<Dossier | null> {
     sb.from("reports").select("id", { count: "exact", head: true }).eq("target_owner_id", id),
     sb.from("blocks").select("blocked_id", { count: "exact", head: true }).eq("blocker_id", id),
     sb.from("blocks").select("blocker_id", { count: "exact", head: true }).eq("blocked_id", id),
+    sb
+      .from("plan_events")
+      .select("id, kind, plan, expires_at, source, actor, product_id, raw, created_at")
+      .eq("user_id", id)
+      .order("created_at", { ascending: false })
+      .limit(40),
   ]);
 
   const u = (userRes.data ?? {}) as {
@@ -314,6 +336,7 @@ export async function fetchMemberDossier(id: string): Promise<Dossier | null> {
     plan_source: u.plan_source ?? null,
     plan_active:
       u.plan === "premium" && (!u.plan_expires_at || new Date(u.plan_expires_at).getTime() > Date.now()),
+    planEvents: ((planEventsRes.data ?? []) as PlanEvent[]).map((e) => ({ ...e, plan: e.plan === "premium" ? "premium" : "free" })),
     platforms: [...platformSet].sort(),
     last_sign_in_at: authRes.data?.user?.last_sign_in_at ?? null,
     counts: {

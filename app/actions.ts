@@ -59,11 +59,20 @@ export async function approveUser(id: string): Promise<Result> {
 // courtesies. set_user_plan() is the one writer (service_role only) and logs
 // to plan_events with who did it; a store/Stripe purchase later overwrites
 // this through RevenueCat's webhook, which is the intended precedence.
+export type PlanMotivo = "venta_whatsapp" | "cortesia" | "prueba" | "otro";
+
+// Premium by hand (Plan card on /broker/[id]): Pablo closes a sale on
+// WhatsApp, grants a courtesy or opens a trial. `motivo` + `note` land in
+// plan_events.raw so the history explains every decision; the source stays
+// «promotional» for courtesies/trials and «manual» for a sale closed by hand.
+// Store / Stripe purchases arrive on their own through RevenueCat and
+// overwrite whatever is set here.
 export async function setUserPlan(
   id: string,
   plan: "free" | "premium",
   expiresAt: string | null,
-  source: "manual" | "promotional" = "manual",
+  motivo: PlanMotivo | "quitar" = "otro",
+  note: string | null = null,
 ): Promise<Result> {
   if (!id) return { error: "Falta el id." };
   if (plan !== "free" && plan !== "premium") return { error: "Plan inválido." };
@@ -72,18 +81,19 @@ export async function setUserPlan(
     const d = new Date(expiresAt);
     if (Number.isNaN(d.getTime())) return { error: "Fecha inválida." };
     // End of that day, CDMX (UTC-6): «hasta el 30 de septiembre» includes it.
-    expires = new Date(`${expiresAt}T23:59:59-06:00`).toISOString();
+    expires = /^\d{4}-\d{2}-\d{2}$/.test(expiresAt) ? new Date(`${expiresAt}T23:59:59-06:00`).toISOString() : d.toISOString();
   }
+  const source = plan !== "premium" ? null : motivo === "venta_whatsapp" ? "manual" : "promotional";
   const sb = supabaseAdmin();
   const { error } = await sb.rpc("set_user_plan", {
     p_user: id,
     p_plan: plan,
     p_expires_at: expires,
-    p_source: plan === "premium" ? source : null,
-    p_kind: "manual",
+    p_source: source,
+    p_kind: plan === "premium" ? `admin_${motivo}` : "admin_quitar",
     p_actor: await reviewer(),
     p_product_id: null,
-    p_raw: null,
+    p_raw: { motivo: plan === "premium" ? motivo : "quitar", note: note?.trim() || null },
   });
   if (error) return { error: error.message };
   revalidatePath(`/broker/${id}`);

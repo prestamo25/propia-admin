@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { PillSearch, PillSegment, PillTray, Toolbar, ToolbarDivider } from "@/components/Pills";
+import { FilterChip, PillSearch, PillSegment, PillTray, Toolbar, ToolbarDivider } from "@/components/Pills";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { BrokerRow } from "@/lib/data";
@@ -61,6 +61,8 @@ export function BrokerTable({
   const router = useRouter();
   const [query, setQuery] = useState(initialQuery);
   const [tier, setTier] = useState<"todos" | Tier>("todos");
+  const [onlyPremium, setOnlyPremium] = useState(false);
+  const premiumCount = useMemo(() => brokers.filter((b) => b.premium).length, [brokers]);
   const [sortKey, setSortKey] = useState<SortKey>("created_at");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
@@ -73,7 +75,8 @@ export function BrokerTable({
   const rows = useMemo(() => {
     const inTier =
       tier === "todos" ? brokers : brokers.filter((b) => tierOf(b.profile_type) === tier);
-    const filtered = filterBrokers(inTier, query);
+    const inPlan = onlyPremium ? inTier.filter((b) => b.premium) : inTier;
+    const filtered = filterBrokers(inPlan, query);
 
     const dir = sortDir === "asc" ? 1 : -1;
     return [...filtered].sort((a, b) => {
@@ -99,7 +102,7 @@ export function BrokerTable({
           );
       }
     });
-  }, [brokers, tier, query, sortKey, sortDir]);
+  }, [brokers, tier, onlyPremium, query, sortKey, sortDir]);
 
   function toggleSort(key: SortKey) {
     if (key === sortKey) {
@@ -127,6 +130,14 @@ export function BrokerTable({
               ["cliente", `Clientes · ${n(tierCounts.cliente)}`],
               ["invitado", `Invitados · ${n(tierCounts.invitado)}`],
             ]}
+          />
+          <FilterChip
+            on={onlyPremium}
+            onClick={() => setOnlyPremium((v) => !v)}
+            label="★ Premium"
+            title="Solo miembros con Premium activo"
+            count={premiumCount}
+            tone="amber"
           />
         </PillTray>
 
@@ -179,6 +190,11 @@ export function BrokerTable({
                   {tierOf(b.profile_type) !== "asesor" ? (
                     <span className="shrink-0 rounded-md bg-indigo-50 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-700 ring-1 ring-indigo-600/10">
                       {profileTypeLabel(b.profile_type)}
+                    </span>
+                  ) : null}
+                  {b.premium ? (
+                    <span className="shrink-0 rounded-md bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800 ring-1 ring-amber-600/10" title="Premium activo">
+                      ★ Premium
                     </span>
                   ) : null}
                   {b.blocked ? (
@@ -305,6 +321,11 @@ export function BrokerTable({
                           {tierOf(b.profile_type) !== "asesor" ? (
                             <span className="shrink-0 rounded-md bg-indigo-50 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-700 ring-1 ring-indigo-600/10">
                               {profileTypeLabel(b.profile_type)}
+                            </span>
+                          ) : null}
+                          {b.premium ? (
+                            <span className="shrink-0 rounded-md bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800 ring-1 ring-amber-600/10" title="Premium activo">
+                              ★ Premium
                             </span>
                           ) : null}
                         </div>
