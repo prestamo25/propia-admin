@@ -2,7 +2,7 @@ import { fetchPendingUsers, type PendingDoc, type PendingUser } from "@/lib/apro
 import { TopNav } from "@/components/TopNav";
 import { ApproveButton } from "@/components/ApproveButton";
 import { requireRole } from "@/lib/session";
-import { initials, avatarColors } from "@/lib/format";
+import { initials, avatarColors, fmtPhone } from "@/lib/format";
 import { profileDetails, profileTypeLabel, tierOf } from "@/lib/profileTypes";
 
 export const dynamic = "force-dynamic";
@@ -35,11 +35,6 @@ const isStale = (iso: string) => Date.now() - new Date(iso).getTime() > DAY_MS;
 // mangles them). No emoji in the prefill for the same reason.
 const waLink = (phone: string, text: string) =>
   `https://api.whatsapp.com/send?phone=${phone.replace(/\D/g, "")}&text=${encodeURIComponent(text)}`;
-
-const fmtPhone = (p: string) =>
-  p?.startsWith("52") && p.length === 12
-    ? `+52 ${p.slice(2, 5)} ${p.slice(5, 8)} ${p.slice(8)}`
-    : p;
 
 const DOC_LABEL: Record<PendingDoc["key"], string> = {
   constancia: "Constancia",

@@ -65,3 +65,31 @@ export function avatarColors(seed: string | null): { bg: string; fg: string } {
   for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
   return PALETTE[h % PALETTE.length];
 }
+
+// Stored phones are bare digits: dial code + 10 national digits (users.phone,
+// attendee rows, test-OTP pairs). Login accepts +52 and +1 (app 2026-09-11),
+// so both shapes render; anything else falls back to "+<digits>".
+const DIALS = ["52", "1"];
+export function splitPhone(raw: string | null | undefined): { dial: string; national: string } | null {
+  const p = String(raw ?? "").replace(/\D/g, "");
+  for (const dial of DIALS) {
+    if (p.length === dial.length + 10 && p.startsWith(dial)) return { dial, national: p.slice(dial.length) };
+  }
+  return null;
+}
+export function fmtPhone(raw: string | null | undefined): string {
+  const split = splitPhone(raw);
+  if (split) {
+    const n = split.national;
+    return `+${split.dial} ${n.slice(0, 3)} ${n.slice(3, 6)} ${n.slice(6)}`;
+  }
+  const p = String(raw ?? "").replace(/\D/g, "");
+  return p ? `+${p}` : "";
+}
+// wa.me target: Mexican numbers still need the legacy "1" after 52 for the
+// desktop client; US numbers are plain E.164 digits.
+export function waHref(raw: string): string {
+  const split = splitPhone(raw);
+  const digits = split ? (split.dial === "52" ? `521${split.national}` : `${split.dial}${split.national}`) : raw.replace(/\D/g, "");
+  return `https://wa.me/${digits}`;
+}

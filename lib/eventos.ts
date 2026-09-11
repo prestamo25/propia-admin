@@ -253,14 +253,9 @@ export function fmtStamp(iso: string | null): string {
   }).format(new Date(iso));
 }
 
-export function fmtPhone(raw: string | null): string {
-  if (!raw) return "";
-  // users.phone is bare digits; events.phone was typed by the organizer and
-  // sometimes carries its own "+" or spaces.
-  const p = raw.replace(/[^\d]/g, "");
-  if (!p) return raw;
-  return p.startsWith("52") && p.length === 12 ? `+52 ${p.slice(2, 5)} ${p.slice(5, 8)} ${p.slice(8)}` : `+${p}`;
-}
+// events.phone is free-typed by the organizer (may carry "+"/spaces);
+// users.phone is bare digits — the shared formatter handles both.
+export { fmtPhone } from "@/lib/format";
 
 export function isPast(e: { start_at: string; end_at: string | null }, now = Date.now()): boolean {
   const end = e.end_at ? new Date(e.end_at).getTime() : new Date(e.start_at).getTime() + 3 * 3600 * 1000;

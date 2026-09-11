@@ -5,7 +5,7 @@ import { fetchMemberDossier, type Person } from "@/lib/miembro";
 import type { Listing } from "@/lib/data";
 import { BlockButton } from "@/components/BlockButton";
 import { PlanCard } from "@/components/PlanCard";
-import { avatarColors, fmtDate, initials, relative } from "@/lib/format";
+import { avatarColors, fmtDate, initials, relative, fmtPhone, waHref } from "@/lib/format";
 import { profileDetails, profileTypeLabel, tierOf } from "@/lib/profileTypes";
 import { ATTENDEE_STATUS_LABEL, fmtStamp, fmtWhen } from "@/lib/eventos";
 
@@ -33,11 +33,6 @@ const STATUS: Record<string, { label: string; cls: string }> = {
 };
 
 const REQ_STATUS: Record<string, string> = { open: "Abierto", closed: "Cerrado", paused: "Pausado" };
-
-function fmtPhone(p: string | null): string {
-  if (!p) return "—";
-  return p.startsWith("52") && p.length === 12 ? `+52 ${p.slice(2, 5)} ${p.slice(5, 8)} ${p.slice(8)}` : `+${p}`;
-}
 
 function Meta({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -200,7 +195,7 @@ export default async function BrokerPage({ params }: { params: Promise<{ id: str
               <dl className="mt-4 grid grid-cols-2 gap-x-8 gap-y-3 text-sm sm:grid-cols-3 lg:grid-cols-4">
                 <Meta label="Teléfono">
                   {broker.phone ? (
-                    <a href={`https://wa.me/${broker.phone.startsWith("52") && broker.phone.length === 12 ? `521${broker.phone.slice(2)}` : broker.phone}`} target="_blank" rel="noreferrer" className="tabular-nums text-brand hover:underline">
+                    <a href={waHref(broker.phone)} target="_blank" rel="noreferrer" className="tabular-nums text-brand hover:underline">
                       {fmtPhone(broker.phone)}
                     </a>
                   ) : "—"}

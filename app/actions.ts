@@ -202,7 +202,7 @@ export async function listRescuePairs(): Promise<{
     }
     return {
       pairs: phones.map((p) => ({
-        phone10: p.slice(2),
+        phone10: p.replace(/^(52|1)(?=\d{10}$)/, ""),
         name: names.get(p) ?? null,
       })),
     };
