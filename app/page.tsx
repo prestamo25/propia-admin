@@ -3,6 +3,7 @@ import { fetchInicio, type WeekMetric } from "@/lib/inicio";
 import { fetchPulse } from "@/lib/pulse";
 import { fetchServicios, type ServiceItem } from "@/lib/servicios";
 import { fetchGeoHealth, type GeoHealth } from "@/lib/geoHealth";
+import { fetchRequestHealth, type RequestHealth } from "@/lib/requestHealth";
 import { fmtWhen } from "@/lib/eventos";
 import { TopNav } from "@/components/TopNav";
 import { LivePulse } from "@/components/LivePulse";
@@ -254,6 +255,73 @@ function GeoHealthStrip({ geo }: { geo: GeoHealth }) {
   );
 }
 
+// Salud de requerimientos (2026-09-21). Parte-de-un-todo: en qué estado está
+// CADA requerimiento abierto. Nació de que las cuatro fallas de ese día eran
+// invisibles — todas terminaban en una pantalla vacía, y el asesor no podía
+// saber si el mercado no tenía nada o si nosotros lo habíamos tirado.
+//
+// Barra apilada horizontal con 2px de aire entre segmentos y leyenda siempre
+// presente: la identidad nunca depende sólo del color (el ámbar no llega a
+// 3:1 contra el fondo, así que cada segmento carga etiqueta y número).
+function RequestHealthStrip({ h }: { h: RequestHealth }) {
+  const when = new Date(h.computedAt).toLocaleString("es-MX", {
+    timeZone: "America/Mexico_City",
+    weekday: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  const n = (v: number) => v.toLocaleString("es-MX");
+  const shown = h.buckets.filter((b) => b.count > 0);
+  return (
+    <section className="mt-8">
+      <div className="flex items-baseline justify-between">
+        <h2 className="text-sm font-semibold text-neutral-900">Salud de requerimientos</h2>
+        <span className="text-[11px] text-neutral-400">Calculado {when}</span>
+      </div>
+
+      <div className="mt-3 rounded-2xl border border-black/[0.05] bg-white p-4 shadow-soft">
+        {/* La cifra que importa: cuántos asesores nunca reciben un aviso. */}
+        <div className="flex flex-wrap items-baseline gap-x-2">
+          <span className="text-2xl font-semibold tabular-nums text-neutral-900">{n(h.silent)}</span>
+          <span className="text-sm text-neutral-500">
+            de {n(h.open)} requerimientos abiertos nunca han recibido un aviso ({h.silentPct}%)
+          </span>
+        </div>
+
+        <div className="mt-3 flex h-3 w-full gap-[2px] overflow-hidden rounded">
+          {shown.map((b) => (
+            <div
+              key={b.key}
+              style={{ width: `${(b.count / h.open) * 100}%`, backgroundColor: b.color }}
+              className="h-full first:rounded-l last:rounded-r"
+            />
+          ))}
+        </div>
+
+        <ul className="mt-3 grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2">
+          {shown.map((b) => (
+            <li key={b.key} className="flex items-baseline gap-2">
+              <span
+                className="mt-1 h-2 w-2 shrink-0 rounded-full"
+                style={{ backgroundColor: b.color }}
+                aria-hidden
+              />
+              <span className="min-w-0">
+                <span className="text-xs text-neutral-700">{b.label}</span>{" "}
+                <span className="text-xs font-semibold tabular-nums text-neutral-900">
+                  {n(b.count)}
+                </span>{" "}
+                <span className="text-[11px] tabular-nums text-neutral-400">{b.pct}%</span>
+                <span className="block text-[11px] leading-snug text-neutral-500">{b.hint}</span>
+              </span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </section>
+  );
+}
+
 function Delta7({ m }: { m: WeekMetric }) {
   const diff = m.now - m.prev;
   const pct = m.prev > 0 ? Math.round((diff / m.prev) * 100) : null;
@@ -294,8 +362,11 @@ export default async function InicioPage() {
   let pulse;
   let servicios: ServiceItem[] = [];
   let geo: GeoHealth | null = null;
+  let reqHealth: RequestHealth | null = null;
   try {
-    [data, pulse, servicios, geo] = await Promise.all([fetchInicio(), fetchPulse(), fetchServicios(), fetchGeoHealth()]);
+    [data, pulse, servicios, geo, reqHealth] = await Promise.all([
+      fetchInicio(), fetchPulse(), fetchServicios(), fetchGeoHealth(), fetchRequestHealth(),
+    ]);
   } catch (e) {
     return (
       <div className="min-h-screen">
@@ -403,6 +474,8 @@ export default async function InicioPage() {
         <ServiciosStrip items={servicios} />
 
         {geo ? <GeoHealthStrip geo={geo} /> : null}
+
+        {reqHealth ? <RequestHealthStrip h={reqHealth} /> : null}
 
         {/* standing totals of the whole network */}
         <section className="mt-8 grid grid-cols-2 gap-3 rounded-2xl border border-black/[0.05] bg-white/70 p-4 shadow-soft sm:grid-cols-4">
