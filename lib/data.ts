@@ -1,6 +1,17 @@
 import { pageAll } from "@/lib/pageAll";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
+// Rieles de pago reales. Es una ALLOWLIST a propósito: una fuente nueva no
+// cuenta como ingreso hasta que alguien la agregue aquí. Falla hacia no
+// inflar, que es el lado correcto para un número que lee Pablo.
+// `promotional` = cortesía/prueba y `manual` = venta cerrada a mano
+// (app/actions.ts) quedan fuera por decisión de Franz 2026-09-21.
+const PAID_SOURCES = new Set(["stripe", "app_store", "play_store", "revenuecat", "oxxo"]);
+
+const activePlan = (row: { plan?: string | null; plan_expires_at?: string | null }) =>
+  row.plan === "premium" &&
+  (!row.plan_expires_at || new Date(row.plan_expires_at).getTime() > Date.now());
+
 export type BrokerRow = {
   id: string;
   name: string | null;
@@ -24,8 +35,14 @@ export type BrokerRow = {
   blocked: boolean;
   // users.profile_type — 'asesor' | 'cliente' | one of the 9 service types.
   profile_type: string;
-  // Paid tier: premium AND not expired (the list badge + «Premium» filter).
+  // Premium que DE VERDAD paga: plan vigente Y comprado por un riel de pago.
+  // Franz 2026-09-21: él, Pablo y Mariana están en premium por cortesía y no
+  // pagan, así que inflaban el contador del panel (8 cuando los que pagan son
+  // 3). El badge y el filtro «Premium» cuentan sólo ingreso real.
   premium: boolean;
+  // Premium vigente pero regalado (cortesía interna o venta a mano). Se
+  // muestra aparte en vez de esconderse: sirve saber a quién le regalamos.
+  comped: boolean;
   plan_source: string | null;
   plan_expires_at: string | null;
   // Activity numbers (Franz 2026-09-02): is this member actually working the
@@ -160,7 +177,8 @@ export async function fetchOverview(): Promise<Overview> {
       mb_used: null,
       blocked: banned.get(row.id) ?? false,
       profile_type: row.profile_type ?? "asesor",
-      premium: row.plan === "premium" && (!row.plan_expires_at || new Date(row.plan_expires_at).getTime() > Date.now()),
+      premium: activePlan(row) && PAID_SOURCES.has(row.plan_source ?? ""),
+      comped: activePlan(row) && !PAID_SOURCES.has(row.plan_source ?? ""),
       plan_source: row.plan_source ?? null,
       plan_expires_at: row.plan_expires_at ?? null,
       requests: requests.get(row.id) ?? 0,

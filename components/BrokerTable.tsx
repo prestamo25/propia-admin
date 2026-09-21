@@ -135,7 +135,7 @@ export function BrokerTable({
             on={onlyPremium}
             onClick={() => setOnlyPremium((v) => !v)}
             label="★ Premium"
-            title="Solo miembros con Premium activo"
+            title="Solo miembros que PAGAN Premium (excluye cortesías y ventas a mano)"
             count={premiumCount}
             tone="amber"
           />
@@ -193,8 +193,12 @@ export function BrokerTable({
                     </span>
                   ) : null}
                   {b.premium ? (
-                    <span className="shrink-0 rounded-md bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800 ring-1 ring-amber-600/10" title="Premium activo">
+                    <span className="shrink-0 rounded-md bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800 ring-1 ring-amber-600/10" title="Premium pagado">
                       ★ Premium
+                    </span>
+                  ) : b.comped ? (
+                    <span className="shrink-0 rounded-md bg-neutral-100 px-1.5 py-0.5 text-[10px] font-semibold text-neutral-600 ring-1 ring-neutral-600/10" title="Premium regalado — no cuenta como ingreso">
+                      Cortesía
                     </span>
                   ) : null}
                   {b.blocked ? (
@@ -324,8 +328,12 @@ export function BrokerTable({
                             </span>
                           ) : null}
                           {b.premium ? (
-                            <span className="shrink-0 rounded-md bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800 ring-1 ring-amber-600/10" title="Premium activo">
+                            <span className="shrink-0 rounded-md bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800 ring-1 ring-amber-600/10" title="Premium pagado">
                               ★ Premium
+                            </span>
+                          ) : b.comped ? (
+                            <span className="shrink-0 rounded-md bg-neutral-100 px-1.5 py-0.5 text-[10px] font-semibold text-neutral-600 ring-1 ring-neutral-600/10" title="Premium regalado — no cuenta como ingreso">
+                              Cortesía
                             </span>
                           ) : null}
                         </div>
