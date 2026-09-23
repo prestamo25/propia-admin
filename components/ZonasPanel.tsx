@@ -146,11 +146,16 @@ export function ZonasPanel({
         else roots.push(z);
       }
       const byName = (a: MapZona, b: MapZona) => zonaLabel(a.nombre).localeCompare(zonaLabel(b.nombre), "es");
+      // Google zones are reviewed by what they carry: the ones requerimientos
+      // actually use come first (phase 3 starts there, not with 109 names).
+      const order = kind === "google"
+        ? (a: MapZona, b: MapZona) => (b.requerimientos ?? 0) - (a.requerimientos ?? 0) || byName(a, b)
+        : byName;
       const walk = (z: MapZona, depth: number) => {
         if (hit(z)) out[kind].push({ z, depth: needle ? 0 : depth });
-        for (const k of (kids.get(z.key) ?? []).sort(byName)) walk(k, depth + 1);
+        for (const k of (kids.get(z.key) ?? []).sort(order)) walk(k, depth + 1);
       };
-      roots.sort(byName).forEach((z) => walk(z, 0));
+      roots.sort(order).forEach((z) => walk(z, 0));
     }
     return out;
   }, [zonas, q]);
@@ -340,6 +345,14 @@ export function ZonasPanel({
                                     {z.municipio}
                                   </span>
                                 </span>
+                                {z.requerimientos ? (
+                                  <span
+                                    title={`${z.requerimientos} requerimiento${z.requerimientos === 1 ? "" : "s"} abierto${z.requerimientos === 1 ? "" : "s"} la usa${z.requerimientos === 1 ? "" : "n"}`}
+                                    className="rounded-full bg-sky-50 px-1.5 text-[11px] font-semibold tabular-nums text-sky-700"
+                                  >
+                                    {z.requerimientos} req
+                                  </span>
+                                ) : null}
                                 {z.traslapes.length ? (
                                   <span
                                     title={`Se traslapa con ${z.traslapes.length}`}
@@ -435,6 +448,13 @@ function ZoneCard({
       </dl>
       <ul className="mt-3 space-y-1 text-[13px] text-neutral-600">
         <li>{z.dibujada ? "Dibujada a mano" : `${z.miembros} colonia${z.miembros === 1 ? "" : "s"} INEGI`}</li>
+        {z.requerimientos ? (
+          <li>
+            Usada por <b>{z.requerimientos}</b> requerimiento{z.requerimientos === 1 ? "" : "s"} abierto
+            {z.requerimientos === 1 ? "" : "s"}
+            {z.kind === "google" ? " — revisar que el área sea la correcta" : ""}
+          </li>
+        ) : null}
         {padre ? <li>Dentro de {link(padre)}</li> : null}
         {hijos.length ? <li>Contiene {join(hijos)}</li> : null}
         {z.traslapes.length ? (

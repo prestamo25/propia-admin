@@ -24,6 +24,8 @@ export type MapZona = {
   padre: string | null;
   /** zones sharing > 5 % of area without either containing the other */
   traslapes: string[];
+  /** open requerimientos pointing at this zone */
+  requerimientos: number;
   geom: Geo;
 };
 
