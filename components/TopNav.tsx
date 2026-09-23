@@ -17,7 +17,6 @@ type NavKey =
   | "whatsapp"
   | "almacenamiento"
   | "lifecycle"
-  | "zonas"
   | "mapa"
   | "ubicaciones";
 
@@ -128,7 +127,6 @@ export async function TopNav({ active }: { active: NavKey }) {
       badge: openReports,
     },
     { href: "/salidas", label: "Salidas", key: "salidas", tier: "lg" },
-    { href: "/zonas", label: "Zonas", key: "zonas", tier: "lg" },
   ];
   // The three dev tools live behind ONE nav item (Franz 2026-08-20: the tab
   // row got too wide): «Técnico ▾» at navlg, a section inside «Más» below.

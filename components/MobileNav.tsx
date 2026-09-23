@@ -19,7 +19,6 @@ type NavKey =
   | "whatsapp"
   | "almacenamiento"
   | "lifecycle"
-  | "zonas"
   | "mapa"
   | "ubicaciones";
 
@@ -180,18 +179,6 @@ export function MobileNav({
           <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
           <polyline points="16 17 21 12 16 7" />
           <line x1="21" x2="9" y1="12" y2="12" />
-        </svg>
-      ),
-    },
-    {
-      href: "/zonas",
-      label: "Zonas",
-      key: "zonas",
-      icon: (
-        <svg {...STROKE}>
-          <path d="m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3z" />
-          <path d="M9 3v15" />
-          <path d="M15 6v15" />
         </svg>
       ),
     },

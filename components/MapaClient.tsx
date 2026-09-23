@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { importLibrary, setOptions } from "@googlemaps/js-api-loader";
 import { MarkerClusterer, type Cluster } from "@googlemaps/markerclusterer";
 import type { MapData, MapListing, MapRequest, MapWaDemand } from "@/lib/mapa";
@@ -7,8 +7,13 @@ import type { MapColonia, MapZona, ZonaKind } from "@/lib/mapaZonas";
 import { contains, shapeOf, type ZoneShape } from "@/lib/geoContains";
 import { FilterChip, PillSegment, PillSelect, PillTray, Toolbar, ToolbarDivider } from "@/components/Pills";
 import { ZonasPanel, zonaLabel, KIND_LABEL, type ZoneCounts } from "@/components/ZonasPanel";
+import { ZonaEditor, type EditState } from "@/components/ZonaEditor";
+import { useZonaEditor, type Evidence, type Ring } from "@/components/useZonaEditor";
+import { borrarZona, crearZona, crearZonaDibujada, guardarZona, ignorarNombre } from "@/app/actions";
+import type { CandidateSet, Failure, ZonaDetail } from "@/lib/zonas";
+import type { Geo } from "@/lib/mapaZonas";
 
-// Same browser key and loader as the zonas bench (ZonaMap.tsx). The map is
+// Browser Maps key (NEXT_PUBLIC_GOOGLE_MAPS_KEY, referrer-locked). The map is
 // created ONCE; filters only swap markers in and out of the clusterer, so a
 // visit costs one map load however much Pablo plays with the filters.
 const KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY ?? "";
@@ -30,7 +35,13 @@ const ZONE_WEIGHT: Record<ZonaKind, { w: number; op: number }> = {
 // Labels appear as you zoom in, most important first.
 const LABEL_ZOOM: Record<ZonaKind, number> = { curada: 11, familia: 12, google: 14 };
 // INEGI outlines only from street-ish zoom: at city level 3,000 of them are ink.
-const COLONIAS_ZOOM = 14;
+const COLONIAS_ZOOM = 13;
+// outer ring of the first polygon — what the boundary editor works on
+function ringOfGeom(g: Geo): Ring {
+  if (g.type === "Polygon") return (g.coordinates as Ring[])[0] ?? [];
+  if (g.type === "MultiPolygon") return (g.coordinates as Ring[][])[0]?.[0] ?? [];
+  return [];
+}
 function hueOf(key: string) {
   let h = 0;
   for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
@@ -226,9 +237,26 @@ export function MapaClient({ data }: { data: MapData }) {
   const [hovered, setHovered] = useState<string | null>(null);
   const [panelOpen, setPanelOpen] = useState(false); // below lg only
 
+  // ── Edición (fase 2): the Zonas bench, on this map ───────────────────────
+  const [edit, setEdit] = useState<EditState | null>(null);
+  const [evidence, setEvidence] = useState<Evidence | null>(null);
+  const [editLoading, setEditLoading] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [flash, setFlash] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+  const [reloadTick, setReloadTick] = useState(0);
+  const [pendientes, setPendientes] = useState<Failure[] | null>(null);
+  // every colonia geometry seen (viewport, members, candidates) — a pick
+  // must be drawable after the viewport that showed it has moved on
+  const geomCache = useRef(new Map<string, { nombre: string; municipio: string; geom: Geo }>());
+  const editSeq = useRef(0);
+  const coloniasOn = showColonias || edit?.modo === "miembros";
+
   // Handlers wired once into the map read these, never stale closures.
   const zoneRef = useRef({
-    kinds, selected, hovered, estado, showColonias,
+    kinds, selected, hovered, estado, showColonias: coloniasOn,
+    edit: null as EditState | null,
+    toggle: (() => {}) as (key: string) => void,
     byKey: new Map<string, MapZona>(),
     shapes: new Map<string, ZoneShape>(),
   });
@@ -240,11 +268,15 @@ export function MapaClient({ data }: { data: MapData }) {
     setZonas(null);
     setZError(null);
     setZLoading(!!v);
+    setEdit(null);
+    setEvidence(null);
+    setPendientes(null);
+    setFlash(null);
   };
   useEffect(() => {
     if (!estado) return;
     const ac = new AbortController();
-    fetch(`/api/mapa/zonas?estado=${encodeURIComponent(estado)}`, { signal: ac.signal })
+    fetch(`/api/mapa/zonas?estado=${encodeURIComponent(estado)}&t=${reloadTick}`, { signal: ac.signal })
       .then(async (r) => {
         const body = await r.json();
         if (!r.ok) throw new Error(body?.error ?? `HTTP ${r.status}`);
@@ -257,7 +289,19 @@ export function MapaClient({ data }: { data: MapData }) {
         if (!ac.signal.aborted) setZLoading(false);
       });
     return () => ac.abort();
-  }, [estado]);
+  }, [estado, reloadTick]);
+
+  useEffect(() => {
+    if (!estado) return;
+    const ac = new AbortController();
+    fetch(`/api/mapa/pendientes?estado=${encodeURIComponent(estado)}&t=${reloadTick}`, { signal: ac.signal })
+      .then((r) => (r.ok ? r.json() : []))
+      .then((rows: Failure[]) => setPendientes(rows))
+      .catch(() => {
+        if (!ac.signal.aborted) setPendientes([]);
+      });
+    return () => ac.abort();
+  }, [estado, reloadTick]);
 
   const shapes = useMemo(() => new Map((zonas ?? []).map((z) => [z.key, shapeOf(z.geom)])), [zonas]);
   const byKey = useMemo(() => new Map((zonas ?? []).map((z) => [z.key, z])), [zonas]);
@@ -286,6 +330,221 @@ export function MapaClient({ data }: { data: MapData }) {
   }, [zonas, shapes, shownListings, shownRequests, shownWa, kinds]);
 
   const listingById = useMemo(() => new Map(data.listings.map((l) => [l.id, l])), [data.listings]);
+
+  // ── Editor ───────────────────────────────────────────────────────────────
+  // event-time only: the pick carries its own name + shape into the edit
+  const toggleMember = (key: string) => {
+    const g = geomCache.current.get(key);
+    setEdit((e) => {
+      if (!e || e.modo !== "miembros") return e;
+      if (e.picked.includes(key)) {
+        const geoms = { ...e.geoms };
+        delete geoms[key];
+        return { ...e, picked: e.picked.filter((k) => k !== key), geoms };
+      }
+      if (!g) return e;
+      return { ...e, picked: [...e.picked, key], geoms: { ...e.geoms, [key]: g } };
+    });
+  };
+  useEffect(() => {
+    zoneRef.current.toggle = toggleMember;
+  });
+  const editor = useZonaEditor({
+    map,
+    ready,
+    edit,
+    evidence,
+    onToggle: toggleMember,
+    onRing: (ring) => setEdit((e) => (e ? { ...e, ring, drawing: ring ? false : e.drawing } : e)),
+  });
+
+  const blankEdit = (over: Partial<EditState>): EditState => ({
+    key: null, kind: null, nombre: "", modo: "miembros", picked: [], geoms: {}, ring: null,
+    drawing: false, seed: null, failure: null, props: 0, ...over,
+  });
+  const cache = (rows: { key: string; nombre: string; municipio: string; geom: Geo }[]) => {
+    for (const r of rows) geomCache.current.set(r.key, { nombre: r.nombre, municipio: r.municipio, geom: r.geom });
+  };
+  const frame = (pts: [number, number][]) => {
+    const m = map.current;
+    if (!m || !pts.length) return;
+    const b = new google.maps.LatLngBounds();
+    for (const [lng, lat] of pts) b.extend({ lat, lng });
+    m.fitBounds(b, 60);
+    google.maps.event.addListenerOnce(m, "idle", () => {
+      if ((m.getZoom() ?? 0) > 16) m.setZoom(16);
+    });
+  };
+
+  function startNew() {
+    editSeq.current++;
+    setMsg(null);
+    setFlash(null);
+    setEvidence(null);
+    setSelected(null);
+    setEdit(blankEdit({}));
+    setPanelOpen(true);
+  }
+
+  async function startEdit(key: string) {
+    const seq = ++editSeq.current;
+    const z = byKey.get(key);
+    setMsg(null);
+    setFlash(null);
+    setEvidence(null);
+    setEditLoading(true);
+    setEdit(blankEdit({ key, kind: z?.kind ?? null, nombre: z ? zonaLabel(z.nombre) : "" }));
+    try {
+      const r = await fetch(`/api/zonas/detalle?key=${encodeURIComponent(key)}`);
+      const body = await r.json();
+      if (seq !== editSeq.current) return;
+      if (!r.ok) throw new Error(body?.error ?? `HTTP ${r.status}`);
+      const det = body as ZonaDetail;
+      cache(det.miembros);
+      cache(det.vecinos);
+      const ring = det.dibujada ? ringOfGeom(det.geom) : null;
+      setEdit(
+        blankEdit({
+          key,
+          kind: z?.kind ?? null,
+          nombre: zonaLabel(det.nombre),
+          modo: det.dibujada ? "dibujo" : "miembros",
+          picked: det.miembros.map((mm) => mm.key),
+          geoms: Object.fromEntries(det.miembros.map((mm) => [mm.key, mm])),
+          ring,
+          seed: ring ? { id: key, ring } : null,
+          props: det.props,
+        }),
+      );
+      setEvidence({ pins: [], polys: det.vecinos.map((v) => ({ ...v, pins: 0 })) });
+    } catch (e) {
+      if (seq === editSeq.current) setMsg({ ok: false, text: e instanceof Error ? e.message : "No se pudo cargar la zona." });
+    } finally {
+      if (seq === editSeq.current) setEditLoading(false);
+    }
+  }
+
+  async function startFailure(f: Failure) {
+    const seq = ++editSeq.current;
+    setMsg(null);
+    setFlash(null);
+    setEvidence(null);
+    setSelected(null);
+    setEdit(blankEdit({ nombre: zonaLabel(f.nombre), failure: f }));
+    if (!f.catalogo) {
+      setMsg({ ok: false, text: `${f.estado} no tiene catálogo INEGI cargado: sólo se puede dibujar o ignorar.` });
+      return;
+    }
+    setEditLoading(true);
+    try {
+      const r = await fetch(`/api/zonas/candidatos?estado=${encodeURIComponent(f.estado)}&nombre=${encodeURIComponent(f.nombre)}`);
+      const body = await r.json();
+      if (seq !== editSeq.current) return;
+      if (!r.ok) throw new Error(body?.error ?? `HTTP ${r.status}`);
+      const set = body as CandidateSet;
+      const cands = [...(set.candidatos ?? [])]
+        .sort((a, b) => b.pins_dentro - a.pins_dentro || b.parecido - a.parecido)
+        .slice(0, 40);
+      cache(cands);
+      setEvidence({
+        pins: set.pins ?? [],
+        polys: cands.map((c) => ({ key: c.key, nombre: c.nombre, municipio: c.municipio, pins: c.pins_dentro, geom: c.geom })),
+      });
+      // frame on the evidence: the pins, plus polygons that hold one
+      const pts: [number, number][] = [...(set.pins ?? [])];
+      for (const c of cands)
+        if (c.pins_dentro > 0) {
+          const [w, so, e, n] = shapeOf(c.geom).bbox;
+          pts.push([w, so], [e, n]);
+        }
+      frame(pts);
+    } catch (e) {
+      if (seq === editSeq.current) setMsg({ ok: false, text: e instanceof Error ? e.message : "No se pudieron cargar los candidatos." });
+    } finally {
+      if (seq === editSeq.current) setEditLoading(false);
+    }
+  }
+
+  function cancelEdit() {
+    editSeq.current++;
+    setEdit(null);
+    setEvidence(null);
+    setMsg(null);
+    setEditLoading(false);
+  }
+
+  const plural = (n: number) => `${n} propiedad${n === 1 ? "" : "es"} re-asignada${n === 1 ? "" : "s"}`;
+  function afterWrite(text: string, select: string | null) {
+    setEdit(null);
+    setEvidence(null);
+    setMsg(null);
+    setFlash(text);
+    setSelected(select);
+    setReloadTick((t) => t + 1);
+  }
+
+  function saveEdit() {
+    const e = edit;
+    if (!e || !estado) return;
+    startTransition(async () => {
+      let res: { error?: string; movidas?: number; key?: string };
+      if (e.key === null) {
+        res =
+          e.modo === "dibujo" && e.ring
+            ? await crearZonaDibujada(e.nombre, estado, e.ring)
+            : await crearZona(e.nombre, estado, e.picked);
+      } else {
+        res =
+          e.modo === "dibujo"
+            ? e.ring
+              ? await guardarZona(e.key, e.nombre, estado, { ring: e.ring })
+              : { error: "El dibujo quedó vacío." }
+            : e.picked.length
+              ? await guardarZona(e.key, e.nombre, estado, { miembros: e.picked })
+              : { error: "Una zona necesita al menos una colonia." };
+      }
+      if (res.error) setMsg({ ok: false, text: res.error });
+      else
+        afterWrite(
+          `${e.key === null ? "Zona creada" : "Zona actualizada"} · ${plural(res.movidas ?? 0)}.`,
+          e.key ?? res.key ?? null,
+        );
+    });
+  }
+
+  function deleteEdit() {
+    const e = edit;
+    if (!e?.key) return;
+    const key = e.key;
+    startTransition(async () => {
+      const res = await borrarZona(key);
+      if (res.error) setMsg({ ok: false, text: res.error });
+      else afterWrite(`Zona borrada · ${plural(res.movidas ?? 0)}.`, null);
+    });
+  }
+
+  function ignoreFailure() {
+    const f = edit?.failure;
+    if (!f) return;
+    startTransition(async () => {
+      const res = await ignorarNombre(f.estado, f.nombre);
+      if (res.error) setMsg({ ok: false, text: res.error });
+      else afterWrite(`«${f.nombre}» salió de la cola.`, null);
+    });
+  }
+
+  // listings on the map the zone would hold, as edited right now
+  const cubre = useMemo(() => {
+    if (!edit) return 0;
+    const shps: ZoneShape[] =
+      edit.modo === "dibujo"
+        ? edit.ring
+          ? [shapeOf({ type: "Polygon", coordinates: [edit.ring] })]
+          : []
+        : edit.picked.flatMap((k) => (edit.geoms[k] ? [shapeOf(edit.geoms[k].geom)] : []));
+    if (!shps.length) return 0;
+    return shownListings.filter((l) => shps.some((sh) => contains(sh, l.lng, l.lat))).length;
+  }, [edit, shownListings]);
 
   // One map per visit.
   useEffect(() => {
@@ -322,12 +581,22 @@ export function MapaClient({ data }: { data: MapData }) {
         // selection or a layer toggle only restyles — never rebuilds.
         zoneTip.current = new InfoWindow({ disableAutoPan: true, headerDisabled: true });
         m.data.setStyle((f) => {
-          const { kinds: k, selected: sel, hovered: hov } = zoneRef.current;
+          const { kinds: k, selected: sel, hovered: hov, edit: ed } = zoneRef.current;
           const kind = f.getProperty("kind") as ZonaKind;
           const key = f.getProperty("key") as string;
           if (!k[kind]) return { visible: false };
           const base = ZONE_WEIGHT[kind];
           const color = f.getProperty("color") as string;
+          // while editing, the other zones stay as faint context and let
+          // clicks through; the one being edited is redrawn by the editor
+          if (ed) {
+            if (key === ed.key) return { visible: false };
+            return {
+              strokeColor: color, strokeWeight: 1, strokeOpacity: 0.6,
+              fillColor: color, fillOpacity: 0.05,
+              zIndex: f.getProperty("rank") as number, clickable: false,
+            };
+          }
           const isSel = key === sel;
           const isHov = key === hov;
           return {
@@ -362,6 +631,7 @@ export function MapaClient({ data }: { data: MapData }) {
           setSelected((s) => (s === key ? null : key));
         });
         m.data.addListener("mouseover", (e: google.maps.Data.MouseEvent) => {
+          if (zoneRef.current.edit) return;
           const key = e.feature.getProperty("key") as string;
           const z = zoneRef.current.byKey.get(key);
           if (!z) return;
@@ -376,11 +646,33 @@ export function MapaClient({ data }: { data: MapData }) {
         // INEGI outlines: a second Data layer on top, fetched per viewport.
         // Clicks fall through to the smallest zone under the point.
         const col = new google.maps.Data({ map: m });
-        col.setStyle({ strokeColor: "#404040", strokeOpacity: 0.55, strokeWeight: 0.8, fillOpacity: 0, zIndex: 20000 });
+        col.setStyle(() => {
+          const ed = zoneRef.current.edit;
+          return {
+            strokeColor: "#404040",
+            strokeOpacity: ed ? 0.8 : 0.55,
+            strokeWeight: ed ? 1 : 0.8,
+            fillColor: "#1c4588",
+            fillOpacity: 0,
+            zIndex: 20000,
+            // drawing: clicks must reach the map to become vertices
+            clickable: !ed || ed.modo === "miembros",
+          };
+        });
         col.addListener("mouseover", (e: google.maps.Data.MouseEvent) => {
           const ll = e.latLng;
           const inZ = ll ? zonesAt(ll).map((z) => esc(zonaLabel(z.nombre))) : [];
-          col.overrideStyle(e.feature, { strokeWeight: 2, strokeOpacity: 0.9 });
+          const ed = zoneRef.current.edit;
+          col.overrideStyle(e.feature, { strokeWeight: 2, strokeOpacity: 0.9, fillOpacity: ed ? 0.12 : 0 });
+          if (ed) {
+            const on = ed.picked.includes(e.feature.getProperty("key") as string);
+            tip(
+              `<b>${esc(zonaLabel(e.feature.getProperty("nombre") as string))}</b><br>` +
+                `<span style="color:#737373">${esc(e.feature.getProperty("municipio") as string)} · click para ${on ? "quitar" : "sumar"}</span>`,
+              ll,
+            );
+            return;
+          }
           tip(
             `<b>${esc(zonaLabel(e.feature.getProperty("nombre") as string))}</b> <span style="color:#737373">· colonia INEGI</span><br>` +
               `<span style="color:#737373">${esc(e.feature.getProperty("municipio") as string)}</span>` +
@@ -394,6 +686,10 @@ export function MapaClient({ data }: { data: MapData }) {
         });
         col.addListener("click", (e: google.maps.Data.MouseEvent) => {
           info.current?.close();
+          if (zoneRef.current.edit?.modo === "miembros") {
+            zoneRef.current.toggle(e.feature.getProperty("key") as string);
+            return;
+          }
           const hit = e.latLng ? zonesAt(e.latLng)[0] : undefined;
           setSelected(hit ? hit.key : null);
         });
@@ -431,8 +727,10 @@ export function MapaClient({ data }: { data: MapData }) {
             .then((rows) => {
               if (mine !== seq) return;
               col.forEach((f) => col.remove(f));
-              for (const c of rows)
+              for (const c of rows) {
                 col.addGeoJson({ type: "Feature", geometry: c.geom, properties: { key: c.key, nombre: c.nombre, municipio: c.municipio } });
+                geomCache.current.set(c.key, { nombre: c.nombre, municipio: c.municipio, geom: c.geom });
+              }
               loadedBox = box;
               loadedEstado = est;
               setColoniasNote(`${rows.length.toLocaleString("en-US")} a la vista${rows.length >= 1500 ? " (tope; acerca más)" : ""}`);
@@ -511,8 +809,8 @@ export function MapaClient({ data }: { data: MapData }) {
   }, []);
 
   useEffect(() => {
-    zoneRef.current = { kinds, selected, hovered, estado, showColonias, byKey, shapes };
-  }, [kinds, selected, hovered, estado, showColonias, byKey, shapes]);
+    zoneRef.current = { ...zoneRef.current, kinds, selected, hovered, estado, showColonias: coloniasOn, byKey, shapes, edit };
+  }, [kinds, selected, hovered, estado, coloniasOn, byKey, shapes, edit]);
 
   // Paint the estado's zones: biggest first so nested ones sit on top.
   useEffect(() => {
@@ -554,11 +852,13 @@ export function MapaClient({ data }: { data: MapData }) {
     const m = map.current;
     if (!ready || !m) return;
     m.data.setStyle(m.data.getStyle() as google.maps.Data.StylingFunction);
+    const col = coloniaLayer.current;
+    col?.setStyle(col.getStyle() as google.maps.Data.StylingFunction);
     for (const [key, { marker, kind }] of zoneLabels.current) {
-      const on = kinds[kind] && (zoom >= LABEL_ZOOM[kind] || key === selected);
+      const on = kinds[kind] && key !== edit?.key && (zoom >= LABEL_ZOOM[kind] || key === selected);
       if (on !== (marker.getMap() != null)) marker.setMap(on ? m : null);
     }
-  }, [ready, kinds, selected, hovered, zoom, zonas]);
+  }, [ready, kinds, selected, hovered, zoom, zonas, edit]);
 
   // Selecting a zone (map, list, or a link in its card) frames it.
   useEffect(() => {
@@ -578,8 +878,8 @@ export function MapaClient({ data }: { data: MapData }) {
     const m = map.current;
     if (!ready || !m) return;
     coloniaReset.current?.();
-    if (showColonias) google.maps.event.trigger(m, "idle");
-  }, [ready, showColonias, estado]);
+    if (coloniasOn) google.maps.event.trigger(m, "idle");
+  }, [ready, coloniasOn, estado]);
 
   // Apply filters: listings live in the clusterer, requerimientos stay
   // un-clustered (their circles are the point).
@@ -771,6 +1071,37 @@ export function MapaClient({ data }: { data: MapData }) {
           selected={selected}
           onSelect={setSelected}
           onHover={setHovered}
+          pendientes={pendientes}
+          onNew={startNew}
+          onEdit={startEdit}
+          onFailure={startFailure}
+          flash={flash}
+          editor={
+            edit ? (
+              <ZonaEditor
+                edit={edit}
+                cubre={cubre}
+                evidence={evidence}
+                loading={editLoading}
+                pending={pending}
+                msg={msg}
+                onNombre={(v) => setEdit((e) => (e ? { ...e, nombre: v } : e))}
+                onModo={(m) =>
+                  setEdit((e) => (e ? { ...e, modo: m, drawing: m === "dibujo" && !e.ring } : e))
+                }
+                onDraw={() => setEdit((e) => (e ? { ...e, drawing: true, ring: null } : e))}
+                onDiscardDrawing={() => {
+                  editor.discardDrawing();
+                  setEdit((e) => (e ? { ...e, drawing: false, ring: null } : e));
+                }}
+                onToggle={toggleMember}
+                onSave={saveEdit}
+                onCancel={cancelEdit}
+                onDelete={deleteEdit}
+                onIgnore={ignoreFailure}
+              />
+            ) : null
+          }
         />
       </div>
       </div>

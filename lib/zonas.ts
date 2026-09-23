@@ -1,6 +1,6 @@
 import { supabaseAdmin } from "./supabaseAdmin";
 
-// Zonas — the curation bench for Propia's own zone layer.
+// Zonas — reads behind the editing tools of the big map (/mapa).
 //
 // The INEGI colonia catalog is ground truth we never edit. On top of it sits a
 // small editorial layer (tipo='ZONA') that speaks the way brokers do: INEGI
@@ -53,22 +53,6 @@ export type ZonaDetail = {
              geom: { type: string; coordinates: unknown } }[];
 };
 
-export type Zona = {
-  key: string;
-  nombre: string;
-  municipio: string;
-  estado: string;
-  miembros: string[] | null;
-  props: number;
-};
-
-export type Salud = {
-  estado: string;
-  props: number;
-  ligadas: number;
-  pct: number;
-};
-
 // What hurts: names that resolve to nothing, worst first.
 export async function fetchFailures(min = 2): Promise<Failure[]> {
   const sb = supabaseAdmin();
@@ -96,45 +80,6 @@ export async function fetchCandidates(
     (a, b) => b.pins_dentro - a.pins_dentro || b.parecido - a.parecido,
   );
   return set;
-}
-
-// The zones that exist today, with how much inventory each one carries.
-export async function fetchZonas(): Promise<Zona[]> {
-  const sb = supabaseAdmin();
-  const { data, error } = await sb
-    .from("colonias")
-    .select("key, nombre, municipio, estado, miembros")
-    .eq("tipo", "ZONA")
-    .order("key");
-  if (error) throw new Error(error.message);
-  const zonas = (data ?? []) as Omit<Zona, "props">[];
-
-  const counts = await Promise.all(
-    zonas.map(async (z) => {
-      const { count } = await sb
-        .from("properties")
-        .select("id", { count: "exact", head: true })
-        .eq("colonia_key", z.key);
-      return count ?? 0;
-    }),
-  );
-  return zonas.map((z, i) => ({ ...z, props: counts[i] }));
-}
-
-// One number that says whether this needs attention at all. Aggregated in
-// SQL on purpose: a supabase-js read of `properties` silently caps at 1,000
-// rows, and a health number computed over a truncated table is a lie — the
-// header showed 72.7% when the truth was 67.3%.
-export async function fetchSalud(): Promise<Salud[]> {
-  const sb = supabaseAdmin();
-  const { data, error } = await sb.rpc("admin_zona_salud");
-  if (error) throw new Error(error.message);
-  return ((data ?? []) as { estado: string; props: number; ligadas: number }[]).map(
-    (r) => ({
-      ...r,
-      pct: r.props ? Math.round((r.ligadas / r.props) * 1000) / 10 : 0,
-    }),
-  );
 }
 
 // Everything about one curated zone: geometry, members, neighbours it could

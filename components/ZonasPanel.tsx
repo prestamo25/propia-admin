@@ -2,10 +2,12 @@
 
 import { useMemo, useState } from "react";
 import type { MapZona, ZonaKind } from "@/lib/mapaZonas";
+import type { Failure } from "@/lib/zonas";
 
 // The side panel of the big map: which zones exist in this estado, how they
 // nest, which ones collide, and how much of what's on the map sits inside
-// one. Read-only in fase 1 — editing moves in from the Zonas bench in fase 2.
+// one. Fase 2: «Nueva zona», «Editar» on a zone's card and the «Sin
+// resolver» queue open the editor, which replaces the panel body.
 
 const LOW = new Set(["de", "del", "la", "las", "los", "y", "a", "en", "el"]);
 export const zonaLabel = (nombre: string) =>
@@ -19,7 +21,7 @@ export const zonaLabel = (nombre: string) =>
 export const KIND_LABEL: Record<ZonaKind, { title: string; hint: string }> = {
   curada: {
     title: "Hechas a mano",
-    hint: "Creadas en el banco de Zonas por el equipo.",
+    hint: "Creadas a mano por el equipo, aquí mismo.",
   },
   familia: {
     title: "Familias automáticas",
@@ -51,6 +53,12 @@ export function ZonasPanel({
   selected,
   onSelect,
   onHover,
+  pendientes,
+  onNew,
+  onEdit,
+  onFailure,
+  editor,
+  flash,
 }: {
   estado: string;
   zonas: MapZona[] | null;
@@ -69,8 +77,17 @@ export function ZonasPanel({
   selected: string | null;
   onSelect: (key: string | null) => void;
   onHover: (key: string | null) => void;
+  pendientes: Failure[] | null;
+  onNew: () => void;
+  onEdit: (key: string) => void;
+  onFailure: (f: Failure) => void;
+  /** while a zone is being edited, the editor takes over the panel body */
+  editor: React.ReactNode | null;
+  /** last save/delete result, shown until the next action */
+  flash: string | null;
 }) {
   const [q, setQ] = useState("");
+  const [tab, setTab] = useState<"zonas" | "pendientes">("zonas");
   const [open, setOpen] = useState<Record<ZonaKind, boolean>>({ curada: true, familia: true, google: false });
 
   const byKey = useMemo(() => new Map((zonas ?? []).map((z) => [z.key, z])), [zonas]);
@@ -78,7 +95,7 @@ export function ZonasPanel({
 
   // Grouped by origin; inside a group, children sit under their parent.
   const groups = useMemo(() => {
-    const norm = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+    const norm = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
     const needle = norm(q.trim());
     const hit = (z: MapZona) => !needle || norm(z.nombre).includes(needle) || norm(z.municipio ?? "").includes(needle);
     const out: Record<ZonaKind, { z: MapZona; depth: number }[]> = { curada: [], familia: [], google: [] };
@@ -104,6 +121,9 @@ export function ZonasPanel({
   const pct = coverage.total ? Math.round((coverage.dentro / coverage.total) * 100) : 0;
   const nTraslapes = (zonas ?? []).filter((z) => z.traslapes.length).length;
 
+  if (editor)
+    return <aside className="flex h-full w-full flex-col border-l border-neutral-200 bg-white">{editor}</aside>;
+
   return (
     <aside className="flex h-full w-full flex-col border-l border-neutral-200 bg-white">
       {/* header: estado + coverage */}
@@ -113,9 +133,18 @@ export function ZonasPanel({
             Zonas{estado ? ` de ${estado}` : ""}
           </h2>
           {zonas ? (
-            <span className="text-xs tabular-nums text-neutral-400">{zonas.length} en total</span>
+            <button
+              type="button"
+              onClick={onNew}
+              className="rounded-full bg-brand px-3 py-1 text-xs font-semibold text-white shadow-sm hover:opacity-90"
+            >
+              ＋ Nueva zona
+            </button>
           ) : null}
         </div>
+        {flash ? (
+          <p className="mt-2 rounded-lg bg-emerald-50 px-2.5 py-1.5 text-[13px] text-emerald-800">{flash}</p>
+        ) : null}
         {!estado ? (
           <p className="mt-2 text-sm text-neutral-500">Elige un estado arriba para ver sus zonas.</p>
         ) : loading ? (
@@ -181,12 +210,37 @@ export function ZonasPanel({
           color={colorOf(sel)}
           zonas={zonas ?? []}
           onSelect={onSelect}
+          onEdit={onEdit}
         />
       ) : null}
 
       {/* list */}
       {estado && zonas ? (
         <div className="flex min-h-0 flex-1 flex-col">
+          <div className="flex gap-1 px-4 pt-3">
+            {(
+              [
+                ["zonas", "Zonas", zonas.length],
+                ["pendientes", "Sin resolver", pendientes?.length ?? 0],
+              ] as const
+            ).map(([t, label, n]) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => setTab(t)}
+                className={`rounded-full px-3 py-1 text-sm font-medium transition ${
+                  tab === t ? "bg-neutral-900 text-white" : "text-neutral-500 hover:bg-neutral-100"
+                }`}
+              >
+                {label}{" "}
+                <span className={`tabular-nums ${tab === t ? "text-white/70" : "text-neutral-400"}`}>{n}</span>
+              </button>
+            ))}
+          </div>
+          {tab === "pendientes" ? (
+            <Pendientes items={pendientes} onPick={onFailure} />
+          ) : (
+          <>
           <div className="px-4 pt-3">
             <input
               type="search"
@@ -272,6 +326,8 @@ export function ZonasPanel({
               El número a la derecha = propiedades del mapa (con los filtros de arriba) que caen dentro.
             </p>
           </div>
+          </>
+          )}
         </div>
       ) : null}
     </aside>
@@ -285,6 +341,7 @@ function ZoneCard({
   color,
   zonas,
   onSelect,
+  onEdit,
 }: {
   z: MapZona;
   byKey: Map<string, MapZona>;
@@ -292,6 +349,7 @@ function ZoneCard({
   color: string;
   zonas: MapZona[];
   onSelect: (key: string | null) => void;
+  onEdit: (key: string) => void;
 }) {
   const padre = z.padre ? byKey.get(z.padre) : null;
   const hijos = zonas.filter((o) => o.padre === z.key);
@@ -342,6 +400,62 @@ function ZoneCard({
             que una contenga a la otra
           </li>
         ) : null}
+      </ul>
+      {z.kind === "google" ? (
+        <p className="mt-3 text-[11px] leading-4 text-neutral-400">
+          Las zonas de Google se revisan en la fase 3 (promover, fusionar o borrar).
+        </p>
+      ) : (
+        <button
+          type="button"
+          onClick={() => onEdit(z.key)}
+          className="mt-3 rounded-full border border-neutral-300 bg-white px-3.5 py-1.5 text-sm font-medium text-neutral-800 shadow-sm hover:bg-neutral-50"
+        >
+          ✏️ Editar zona
+        </button>
+      )}
+    </div>
+  );
+}
+
+function Pendientes({ items, onPick }: { items: Failure[] | null; onPick: (f: Failure) => void }) {
+  if (!items) return <p className="px-4 py-3 text-sm text-neutral-500">Cargando…</p>;
+  if (!items.length)
+    return (
+      <p className="px-4 py-6 text-center text-sm text-neutral-500">
+        Nada pendiente aquí: todo lo que escriben los brokers en este estado está resolviendo.
+      </p>
+    );
+  return (
+    <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-4 pt-2">
+      <p className="px-2 pb-2 text-[11px] leading-4 text-neutral-400">
+        Nombres que los brokers usan y hoy no llevan a ninguna zona, por impacto. Toca uno para verlo en el mapa.
+      </p>
+      <ul>
+        {items.map((f) => (
+          <li key={f.nombre}>
+            <button
+              type="button"
+              onClick={() => onPick(f)}
+              className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm hover:bg-neutral-50"
+            >
+              <span className="min-w-0 flex-1">
+                <span className="block truncate font-medium text-neutral-800">{f.nombre}</span>
+                {f.ejemplo ? <span className="block truncate text-[11px] text-neutral-400">{f.ejemplo}</span> : null}
+              </span>
+              {f.props > 0 ? (
+                <span title={`${f.props} propiedades sin zona`} className="rounded-md bg-rose-50 px-1.5 py-0.5 text-xs font-semibold tabular-nums text-rose-600">
+                  {f.props}
+                </span>
+              ) : null}
+              {f.brokers > 0 ? (
+                <span title={`${f.brokers} brokers la tienen en su perfil`} className="rounded-md bg-indigo-50 px-1.5 py-0.5 text-xs font-semibold tabular-nums text-indigo-600">
+                  {f.brokers}
+                </span>
+              ) : null}
+            </button>
+          </li>
+        ))}
       </ul>
     </div>
   );
