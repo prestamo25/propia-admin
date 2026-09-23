@@ -21,7 +21,8 @@ type NavKey =
   | "lifecycle"
   | "zonas"
   | "mapa"
-  | "ubicaciones";
+  | "ubicaciones"
+  | "avisos";
 
 type Item = {
   href: string;
@@ -130,6 +131,17 @@ export function MobileNav({
           <line x1="16" y1="2" x2="16" y2="6" />
           <line x1="8" y1="2" x2="8" y2="6" />
           <line x1="3" y1="10" x2="21" y2="10" />
+        </svg>
+      ),
+    },
+    {
+      href: "/avisos",
+      label: "Avisos",
+      key: "avisos",
+      icon: (
+        <svg {...STROKE}>
+          <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+          <path d="M13.73 21a2 2 0 0 1-3.46 0" />
         </svg>
       ),
     },

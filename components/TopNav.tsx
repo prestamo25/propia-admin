@@ -19,7 +19,8 @@ type NavKey =
   | "lifecycle"
   | "zonas"
   | "mapa"
-  | "ubicaciones";
+  | "ubicaciones"
+  | "avisos";
 
 // The tab row folds from the right into a «Más» menu as the window narrows
 // (Franz 2026-09-03: his everyday window is ~960px wide and the row
@@ -117,6 +118,7 @@ export async function TopNav({ active }: { active: NavKey }) {
       badge: pendingUsers,
     },
     { href: "/eventos", label: "Eventos", key: "eventos" },
+    { href: "/avisos", label: "Avisos", key: "avisos", tier: "md" },
     { href: "/en-vivo", label: "En vivo", key: "envivo" },
     { href: "/panorama", label: "Panorama", key: "panorama", tier: "md" },
     { href: "/mapa", label: "Mapa", key: "mapa", tier: "md" },

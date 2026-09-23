@@ -455,3 +455,106 @@ export async function keepGeoReview(id: string): Promise<Result> {
   revalidatePath("/ubicaciones");
   return {};
 }
+
+// ── Avisos masivos (broadcasts-2026-09-21) ──────────────────────────────────
+// El 09-21 Franz/Pablo pidieron un push promocional a Puebla y salió con un
+// script suelto porque no existe push de texto libre. Franz: «this could
+// become a habit» ⇒ vive aquí, con historial y con el conteo a la vista.
+//
+// ⚠ A propósito NO inserta filas en `notifications`: sin un tipo de aviso en
+// la app, la campanita mostraría un tipo desconocido. Llega a la pantalla de
+// bloqueo; la campanita y el switch de Ajustes llegan con un OTA posterior.
+// El apagador `notif_avisos` YA se respeta (lo aplica broadcast_tokens).
+export async function sendBroadcast(input: {
+  body: string;
+  estado?: string | null;
+  tier?: string | null;
+  eventId?: string | null;
+}): Promise<Result & { sent?: number }> {
+  const role = await getRole();
+  if (!role || !roleCan(role, "admin")) return { error: "Sin permiso." };
+
+  const body = input.body?.trim();
+  if (!body) return { error: "El texto va vacío." };
+  if (body.length > 300) return { error: "El texto pasa de 300 caracteres." };
+
+  const sb = supabaseAdmin();
+  const estado = input.estado?.trim() || null;
+  const tier = input.tier === "premium" || input.tier === "free" ? input.tier : null;
+
+  const { data: rows, error: tokErr } = await sb.rpc("broadcast_tokens", {
+    p_state: estado,
+    p_tier: tier,
+  });
+  if (tokErr) return { error: tokErr.message };
+
+  const tokens = [
+    ...new Set(
+      ((rows ?? []) as { token: string }[])
+        .map((r) => r.token)
+        .filter((t) => typeof t === "string" && t.startsWith("ExponentPushToken")),
+    ),
+  ];
+  const people = new Set(((rows ?? []) as { user_id: string }[]).map((r) => r.user_id)).size;
+  if (tokens.length === 0) return { error: "Ese filtro no alcanza a ningún dispositivo." };
+
+  const { data: bc, error: insErr } = await sb
+    .from("broadcasts")
+    .insert({
+      body,
+      audience: { state: estado, tier },
+      event_id: input.eventId || null,
+      sent_by: role,
+      devices: tokens.length,
+      people,
+    })
+    .select("id")
+    .single();
+  if (insErr) return { error: insErr.message };
+
+  // Mismo formato que push-fanout, para que un aviso se vea igual que
+  // cualquier otra notificación de Propia en la pantalla de bloqueo.
+  const path = input.eventId ? `/(tabs)/events/${input.eventId}` : "/(tabs)/events";
+  const messages = tokens.map((to) => ({
+    to,
+    title: "Propia",
+    body,
+    sound: "default",
+    data: { path },
+  }));
+
+  let ok = 0;
+  let failed = 0;
+  const dead: string[] = [];
+  for (let i = 0; i < messages.length; i += 100) {
+    const chunk = messages.slice(i, i + 100);
+    try {
+      const res = await fetch("https://exp.host/--/api/v2/push/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(chunk),
+      });
+      const json = (await res.json().catch(() => null)) as {
+        data?: { status: string; details?: { error?: string } }[];
+      } | null;
+      const tickets = json?.data ?? [];
+      tickets.forEach((t, j) => {
+        if (t.status === "ok") ok++;
+        else {
+          failed++;
+          if (t.details?.error === "DeviceNotRegistered") dead.push(chunk[j].to);
+        }
+      });
+    } catch {
+      failed += chunk.length;
+    }
+  }
+
+  // Un teléfono que desinstaló la app vuelve DeviceNotRegistered — se tira el
+  // token para dejar de empujar al vacío (igual que push-fanout).
+  if (dead.length) await sb.from("push_tokens").delete().in("token", dead);
+  await sb.from("broadcasts").update({ ok, failed }).eq("id", bc.id);
+
+  revalidatePath("/avisos");
+  return { sent: ok };
+}
