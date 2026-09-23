@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { importLibrary, setOptions } from "@googlemaps/js-api-loader";
 import { MarkerClusterer, type Cluster } from "@googlemaps/markerclusterer";
-import type { Geo, MapColonia, MapZona, Propuesta, ZonaKind } from "@/lib/mapaZonas";
+import type { Geo, MapColonia, MapZona, PorUbicar, Propuesta, ZonaKind } from "@/lib/mapaZonas";
 import { contains, shapeOf, type ZoneShape } from "@/lib/geoContains";
 import { PillSelect, PillTray, Toolbar } from "@/components/Pills";
 import { ZonasPanel, zonaLabel, KIND_LABEL, type PanelTab, type ZoneCounts } from "@/components/ZonasPanel";
@@ -134,7 +134,8 @@ export function ZonasClient({
   const [zLoading, setZLoading] = useState(!!estado);
   const [zError, setZError] = useState<string | null>(null);
   const [kinds, setKinds] = useState<Record<ZonaKind, boolean>>({ curada: true, familia: true, google: false });
-  const [showColonias, setShowColonias] = useState(false);
+  // on by default (Franz 09-23): the INEGI lines are the base the zones sit on
+  const [showColonias, setShowColonias] = useState(true);
   const [coloniasNote, setColoniasNote] = useState<string | null>(null);
   const [fuera, setFuera] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
@@ -150,6 +151,7 @@ export function ZonasClient({
   const [reloadTick, setReloadTick] = useState(0);
   const [pendientes, setPendientes] = useState<Failure[] | null>(null);
   const [propuestas, setPropuestas] = useState<Propuesta[] | null>(null);
+  const [porUbicar, setPorUbicar] = useState<PorUbicar[] | null>(null);
   const [tab, setTab] = useState<PanelTab>("zonas");
   // every colonia geometry seen (viewport, members, candidates) — a pick
   // must be drawable after the viewport that showed it has moved on
@@ -177,6 +179,7 @@ export function ZonasClient({
     setEvidence(null);
     setPendientes(null);
     setPropuestas(null);
+    setPorUbicar(null);
     setFlash(null);
   };
   useEffect(() => {
@@ -217,6 +220,18 @@ export function ZonasClient({
       .then((rows: Propuesta[]) => setPropuestas(rows))
       .catch(() => {
         if (!ac.signal.aborted) setPropuestas([]);
+      });
+    return () => ac.abort();
+  }, [estado, reloadTick]);
+
+  useEffect(() => {
+    if (!estado) return;
+    const ac = new AbortController();
+    fetch(`/api/zonas/por-ubicar?estado=${encodeURIComponent(estado)}&t=${reloadTick}`, { signal: ac.signal })
+      .then((r) => (r.ok ? r.json() : []))
+      .then((rows: PorUbicar[]) => setPorUbicar(rows))
+      .catch(() => {
+        if (!ac.signal.aborted) setPorUbicar([]);
       });
     return () => ac.abort();
   }, [estado, reloadTick]);
@@ -878,16 +893,41 @@ export function ZonasClient({
       prop.addGeoJson({ type: "Feature", geometry: p.geom!, properties: { id: p.id } });
   }, [ready, propuestas, tab, edit]);
 
-  // «Propiedades sin zona»: the only listing pins this page ever shows.
+  // «Propiedades por ubicar»: the only listing pins this page ever shows.
   useEffect(() => {
     const cl = outsideCl.current;
-    if (!ready || !cl) return;
+    const m = map.current;
+    if (!ready || !cl || !m) return;
     cl.clearMarkers(true);
-    if (!fuera || !zonas) return;
+    if (!fuera || !porUbicar) return;
     cl.addMarkers(
-      outside.map((l) => new google.maps.Marker({ position: { lat: l.lat, lng: l.lng }, icon: OUTSIDE_PIN(), clickable: false })),
+      porUbicar
+        .filter((p) => p.lat != null && p.lng != null)
+        .map((p) => {
+          const mk = new google.maps.Marker({ position: { lat: p.lat!, lng: p.lng! }, icon: OUTSIDE_PIN(), title: p.name ?? "" });
+          mk.addListener("click", () => {
+            zoneTip.current?.setContent(
+              `<div style="font:12px/1.4 system-ui;padding:2px 4px;max-width:240px"><b>${esc(p.name) || "Sin título"}</b><br>` +
+                `<span style="color:#737373">${esc(p.address) || "sin dirección"}</span><br>` +
+                `<a href="/broker/${p.user_id}" style="color:#1c4588">${esc(p.owner) || "Ver asesor"} →</a></div>`,
+            );
+            zoneTip.current?.setPosition({ lat: p.lat!, lng: p.lng! });
+            zoneTip.current?.open({ map: m });
+          });
+          return mk;
+        }),
     );
-  }, [ready, fuera, zonas, outside]);
+  }, [ready, fuera, porUbicar]);
+
+  // «Ver en el mapa» from the list: street level, pins on.
+  const focusPoint = (lat: number, lng: number) => {
+    const m = map.current;
+    if (!m) return;
+    setFuera(true);
+    setPanelOpen(false);
+    m.panTo({ lat, lng });
+    m.setZoom(17);
+  };
 
   return (
     <div className="flex flex-1 flex-col">
@@ -956,6 +996,8 @@ export function ZonasClient({
             onTab={setTab}
             propuestas={propuestas}
             onPropuesta={startPropuesta}
+            porUbicar={porUbicar}
+            onFocusPoint={focusPoint}
             editor={
               edit ? (
                 <ZonaEditor

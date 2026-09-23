@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { MapZona, Propuesta, PropuestaTipo, ZonaKind } from "@/lib/mapaZonas";
+import type { MapZona, PorUbicar, PorUbicarMotivo, Propuesta, PropuestaTipo, ZonaKind } from "@/lib/mapaZonas";
 import type { Failure } from "@/lib/zonas";
 
 // The side panel of the big map: which zones exist in this estado, how they
@@ -34,7 +34,22 @@ export const KIND_LABEL: Record<ZonaKind, { title: string; hint: string }> = {
 };
 
 export type ZoneCounts = { props: number; reqs: number };
-export type PanelTab = "zonas" | "pendientes" | "propuestas";
+export type PanelTab = "zonas" | "pendientes" | "propuestas" | "ubicar";
+
+const MOTIVO: Record<PorUbicarMotivo, { title: string; hint: string }> = {
+  sin_ubicacion: {
+    title: "Sin ubicación",
+    hint: "Ni colonia ni pin: la dirección escrita no se entiende (o es «pendiente»). Pedirle al broker que la ubique, o crear la zona que nombra.",
+  },
+  hueco_inegi: {
+    title: "Pin en un hueco del INEGI",
+    hint: "El pin cae donde el INEGI no tiene colonia (desarrollos nuevos). Dibujar la zona ahí.",
+  },
+  colonia_lejos: {
+    title: "Colonia lejos del pin",
+    hint: "La colonia guardada queda a más de 2 km de su pin, y el pin cae en un hueco del INEGI: revisar a mano.",
+  },
+};
 
 export const TIPO_PROPUESTA: Record<PropuestaTipo, string> = {
   familia: "familia de colonias",
@@ -73,6 +88,8 @@ export function ZonasPanel({
   onTab,
   propuestas,
   onPropuesta,
+  porUbicar,
+  onFocusPoint,
 }: {
   estado: string;
   zonas: MapZona[] | null;
@@ -103,6 +120,8 @@ export function ZonasPanel({
   onTab: (t: PanelTab) => void;
   propuestas: Propuesta[] | null;
   onPropuesta: (p: Propuesta) => void;
+  porUbicar: PorUbicar[] | null;
+  onFocusPoint: (lat: number, lng: number) => void;
 }) {
   const [q, setQ] = useState("");
   const setTab = onTab;
@@ -211,9 +230,9 @@ export function ZonasPanel({
           <Toggle
             on={fuera}
             onClick={onFuera}
-            label="Propiedades sin zona"
-            count={coverage.total - coverage.dentro}
-            title="Pinta en rojo las propiedades que no caen en ninguna zona visible: lo que falta mapear."
+            label="Propiedades por ubicar"
+            count={porUbicar?.filter((p) => p.lat != null).length ?? 0}
+            title="Pinta en rojo las propiedades con pin cuya ubicación necesita revisión (hueco del INEGI o colonia lejos del pin). La lista completa está en la pestaña «Por ubicar»."
             swatch={<span className="inline-block h-3 w-3 rounded-full bg-rose-600" />}
           />
         </div>
@@ -241,6 +260,7 @@ export function ZonasPanel({
                 ["zonas", "Zonas", zonas.length],
                 ["propuestas", "Propuestas", propuestas?.filter((p) => p.revision === "pendiente").length ?? 0],
                 ["pendientes", "Sin resolver", pendientes?.length ?? 0],
+                ["ubicar", "Por ubicar", porUbicar?.length ?? 0],
               ] as const
             ).map(([t, label, n]) => (
               <button
@@ -260,6 +280,8 @@ export function ZonasPanel({
             <Pendientes items={pendientes} onPick={onFailure} />
           ) : tab === "propuestas" ? (
             <Propuestas items={propuestas} onPick={onPropuesta} />
+          ) : tab === "ubicar" ? (
+            <PorUbicarList items={porUbicar} onFocus={onFocusPoint} />
           ) : (
           <>
           <div className="px-4 pt-3">
@@ -505,6 +527,63 @@ function Propuestas({ items, onPick }: { items: Propuesta[] | null; onPick: (p: 
       ) : (
         <p className="px-2 py-4 text-center text-xs text-neutral-400">Nada aquí.</p>
       )}
+    </div>
+  );
+}
+
+function PorUbicarList({
+  items,
+  onFocus,
+}: {
+  items: PorUbicar[] | null;
+  onFocus: (lat: number, lng: number) => void;
+}) {
+  if (!items) return <p className="px-4 py-3 text-sm text-neutral-500">Cargando…</p>;
+  if (!items.length)
+    return <p className="px-4 py-6 text-center text-sm text-neutral-500">Todas las propiedades de este estado están ubicadas.</p>;
+  return (
+    <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-4 pt-2">
+      <p className="px-2 pb-2 text-[11px] leading-4 text-neutral-400">
+        Propiedades cuya ubicación necesita a alguien. Las que caen en una colonia INEGI correcta no aparecen aquí:
+        una colonia es una ubicación válida aunque no esté dentro de una zona.
+      </p>
+      {(Object.keys(MOTIVO) as PorUbicarMotivo[]).map((m) => {
+        const rows = items.filter((p) => p.motivo === m);
+        if (!rows.length) return null;
+        return (
+          <section key={m} className="mt-2">
+            <h4 className="flex items-center justify-between px-2 text-[11px] font-semibold uppercase tracking-wider text-neutral-400">
+              <span>{MOTIVO[m].title}</span>
+              <span className="tabular-nums">{rows.length}</span>
+            </h4>
+            <p className="px-2 pb-1 text-[11px] leading-4 text-neutral-400">{MOTIVO[m].hint}</p>
+            <ul>
+              {rows.map((p) => (
+                <li key={p.id} className="flex items-start gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-neutral-50">
+                  <span className="mt-1.5 inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-rose-600" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-medium text-neutral-800">{p.name || "Sin título"}</span>
+                    <span className="block truncate text-[11px] text-neutral-500">
+                      {p.address?.trim() ? p.address : "sin dirección"}
+                      {p.colonia ? ` · guardada: ${zonaLabel(p.colonia)}` : ""}
+                    </span>
+                    <span className="flex gap-2 text-[11px]">
+                      <a href={`/broker/${p.user_id}`} className="text-brand hover:underline">
+                        {p.owner || "Ver asesor"} →
+                      </a>
+                      {p.lat != null && p.lng != null ? (
+                        <button type="button" onClick={() => onFocus(p.lat!, p.lng!)} className="text-neutral-500 hover:text-neutral-800 hover:underline">
+                          Ver en el mapa
+                        </button>
+                      ) : null}
+                    </span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        );
+      })}
     </div>
   );
 }

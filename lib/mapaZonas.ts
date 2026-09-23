@@ -90,3 +90,26 @@ export async function fetchPropuestaMiembros(id: number): Promise<MapColonia[]> 
   if (error) throw new Error(error.message);
   return (data ?? []) as MapColonia[];
 }
+
+// «Por ubicar»: listings whose location needs a human (see admin_props_por_ubicar).
+export type PorUbicarMotivo = "sin_ubicacion" | "hueco_inegi" | "colonia_lejos";
+
+export type PorUbicar = {
+  id: string;
+  name: string | null;
+  address: string | null;
+  lat: number | null;
+  lng: number | null;
+  user_id: string;
+  owner: string | null;
+  colonia: string | null;
+  motivo: PorUbicarMotivo;
+  created_at: string;
+};
+
+export async function fetchPorUbicar(estado: string): Promise<PorUbicar[]> {
+  const sb = supabaseAdmin();
+  const { data, error } = await sb.rpc("admin_props_por_ubicar", { p_estado: estado });
+  if (error) throw new Error(error.message);
+  return (data ?? []) as PorUbicar[];
+}
