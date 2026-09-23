@@ -46,7 +46,7 @@ export function ZonaEditor({
   onIgnore,
 }: {
   edit: EditState;
-  /** listings on the map (current filters) the zone would hold as edited */
+  /** listings of the estado the zone would hold as edited */
   cubre: number;
   evidence: Evidence | null;
   loading: boolean;
@@ -259,7 +259,7 @@ export function ZonaEditor({
 
       <div className="border-t border-neutral-100 px-4 py-3">
         <p className="text-xs text-neutral-500">
-          Cubriría <b className="tabular-nums text-neutral-800">{cubre}</b> propiedades del mapa (con los filtros de arriba).
+          Cubriría <b className="tabular-nums text-neutral-800">{cubre}</b> propiedades con ubicación.
         </p>
         {msg ? (
           <p className={`mt-2 text-sm ${msg.ok ? "text-emerald-700" : "text-rose-600"}`}>{msg.text}</p>

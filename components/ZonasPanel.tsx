@@ -155,8 +155,8 @@ export function ZonasPanel({
           <div className="mt-3 grid grid-cols-2 gap-2">
             <Stat
               value={`${pct}%`}
-              label="propiedades dentro de una zona visible"
-              sub={`${coverage.dentro.toLocaleString("en-US")} de ${coverage.total.toLocaleString("en-US")} en el mapa`}
+              label="propiedades dentro de una zona"
+              sub={`${coverage.dentro.toLocaleString("en-US")} de ${coverage.total.toLocaleString("en-US")} con ubicación`}
             />
             <Stat
               value={String(nTraslapes)}
@@ -193,9 +193,9 @@ export function ZonasPanel({
           <Toggle
             on={fuera}
             onClick={onFuera}
-            label="Sólo propiedades fuera de zona"
+            label="Propiedades sin zona"
             count={coverage.total - coverage.dentro}
-            title="Esconde las propiedades que ya caen en alguna zona visible: lo rojo es lo que falta mapear."
+            title="Pinta en rojo las propiedades que no caen en ninguna zona visible: lo que falta mapear."
             swatch={<span className="inline-block h-3 w-3 rounded-full bg-rose-600" />}
           />
         </div>
@@ -323,7 +323,7 @@ export function ZonasPanel({
               );
             })}
             <p className="mt-3 px-2 text-[11px] leading-4 text-neutral-400">
-              El número a la derecha = propiedades del mapa (con los filtros de arriba) que caen dentro.
+              El número a la derecha = propiedades con ubicación que caen dentro de la zona.
             </p>
           </div>
           </>

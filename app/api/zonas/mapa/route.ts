@@ -3,7 +3,7 @@ import { fetchMapaZonas } from "@/lib/mapaZonas";
 import { getRole } from "@/lib/session";
 import { roleCan } from "@/lib/auth";
 
-// Every zone of one estado, for the big map. Fetched on estado change so the
+// Every zone of one estado, for the Zonas map. Fetched on estado change so the
 // map itself is created once per visit. Gated like the page.
 export const dynamic = "force-dynamic";
 

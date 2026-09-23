@@ -1,7 +1,7 @@
 import { supabaseAdmin } from "./supabaseAdmin";
 
-// Mapa de zonas (fase 1, 2026-09-23): every zone of one estado on the big
-// map at once. Two reads, both service-role RPCs behind the admin gate:
+// Zonas page (2026-09-23): every zone of one estado on its big map at once.
+// Two reads, both service-role RPCs behind the admin gate:
 // the zones themselves (with origin, nesting and overlaps worked out in SQL),
 // and INEGI colonia outlines for the current viewport only — Puebla alone has
 // 3,277, far too many to draw at city zoom.

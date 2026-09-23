@@ -3,8 +3,8 @@
 import { useEffect, useRef } from "react";
 import type { Geo } from "@/lib/mapaZonas";
 
-// The editing half of the big map (fase 2, 2026-09-23): what used to be the
-// Zonas bench's own little map, now layered onto Mapa. Three things:
+// The editing half of the Zonas map (2026-09-23): what used to be the old
+// bench's own little map, now layered onto the big one. Three things:
 //   · members — the INEGI colonias a zone is made of, filled in brand blue;
 //     clicking one (here, or its outline in the colonias layer) toggles it
 //   · evidence — the queue's red pins plus the candidate polygons around
