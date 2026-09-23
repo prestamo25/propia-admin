@@ -31,6 +31,8 @@ export type MapColonia = {
   key: string;
   nombre: string;
   municipio: string;
+  /** colonias of the estado with this same name (1 = the name alone resolves) */
+  homonimos?: number;
   geom: Geo;
 };
 

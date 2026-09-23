@@ -640,11 +640,13 @@ export function ZonasClient({
         // INEGI outlines: a second Data layer on top, fetched per viewport.
         // Outside the editor, clicks fall through to the smallest zone there.
         const col = new google.maps.Data({ map: m });
-        col.setStyle(() => {
+        col.setStyle((f) => {
           const ed = zoneRef.current.edit;
+          // amber = the name repeats in the estado (needs the municipio)
+          const repeats = ((f.getProperty("homonimos") as number | undefined) ?? 1) > 1;
           return {
-            strokeColor: "#404040",
-            strokeOpacity: ed ? 0.8 : 0.55,
+            strokeColor: repeats && !ed ? "#d97706" : "#404040",
+            strokeOpacity: ed ? 0.8 : repeats ? 0.85 : 0.55,
             strokeWeight: ed ? 1 : 0.8,
             fillColor: "#1c4588",
             fillOpacity: 0,
@@ -664,10 +666,20 @@ export function ZonasClient({
             tip(`<b>${nombre}</b><br><span style="color:#737373">${mun} · click para ${on ? "quitar" : "sumar"}</span>`, ll);
             return;
           }
+          // A colonia is a valid place on its own: what matters is whether its
+          // name alone gets there, or repeats elsewhere in the estado and needs
+          // the municipio (that is where a zone can help). «Sin zona» made
+          // correct colonias like La Vista Country look broken.
           const inZ = ll ? zonesAt(ll).map((z) => esc(zonaLabel(z.nombre))) : [];
+          const h = (e.feature.getProperty("homonimos") as number | undefined) ?? 1;
+          const estadoTxt =
+            h > 1
+              ? `<span style="color:#b45309">⚠ Hay ${h} colonias con este nombre en el estado: sólo se reconoce con el municipio</span>`
+              : `<span style="color:#15803d">✓ Se reconoce por su nombre</span>`;
           tip(
             `<b>${nombre}</b> <span style="color:#737373">· colonia INEGI</span><br><span style="color:#737373">${mun}</span>` +
-              (inZ.length ? `<br>En zona: <b>${inZ.join(" › ")}</b>` : `<br><span style="color:${OUTSIDE}">Sin zona</span>`),
+              `<br>${estadoTxt}` +
+              (inZ.length ? `<br>Dentro de: <b>${inZ.join(" › ")}</b>` : ""),
             ll,
           );
         });
@@ -736,7 +748,11 @@ export function ZonasClient({
               if (mine !== seq) return;
               col.forEach((f) => col.remove(f));
               for (const c of rows) {
-                col.addGeoJson({ type: "Feature", geometry: c.geom, properties: { key: c.key, nombre: c.nombre, municipio: c.municipio } });
+                col.addGeoJson({
+                  type: "Feature",
+                  geometry: c.geom,
+                  properties: { key: c.key, nombre: c.nombre, municipio: c.municipio, homonimos: c.homonimos ?? 1 },
+                });
                 geomCache.current.set(c.key, { nombre: c.nombre, municipio: c.municipio, geom: c.geom });
               }
               loadedBox = box;

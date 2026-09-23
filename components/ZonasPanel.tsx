@@ -204,7 +204,7 @@ export function ZonasPanel({
             on={colonias}
             onClick={onColonias}
             label="Colonias INEGI"
-            title="Los polígonos oficiales, sólo de lo que está a la vista."
+            title="Los polígonos oficiales, sólo de lo que está a la vista. Gris = se reconoce por su nombre; ámbar = el nombre se repite en el estado y sólo se reconoce con el municipio."
             note={colonias ? coloniasNote : null}
             swatch={<span className="inline-block h-3 w-3 rounded-sm border border-dashed border-neutral-500" />}
           />
