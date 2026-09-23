@@ -180,3 +180,47 @@ export function ToolbarDivider() {
     <span className="mx-1 hidden h-6 w-px bg-neutral-200 sm:inline-block" />
   );
 }
+
+// A map layer you switch on and off: its swatch is the legend, its count says
+// what it holds. Off = greyed swatch on a quiet tray-coloured pill.
+export function LayerPill({
+  on,
+  onClick,
+  label,
+  count,
+  swatch,
+  title,
+  note,
+}: {
+  on: boolean;
+  onClick: () => void;
+  label: string;
+  count?: number;
+  swatch: React.ReactNode;
+  title?: string;
+  /** small status under/after the label (e.g. «acerca el mapa») */
+  note?: string | null;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={on}
+      title={title}
+      className={`inline-flex h-8 items-center gap-1.5 rounded-full border px-2.5 text-[13px] font-medium transition ${
+        on
+          ? "border-neutral-300 bg-white text-neutral-900 shadow-sm"
+          : "border-transparent bg-neutral-100 text-neutral-400 hover:text-neutral-600"
+      }`}
+    >
+      <span className={on ? "" : "opacity-40 grayscale"}>{swatch}</span>
+      {label}
+      {count != null ? (
+        <span className={`tabular-nums ${on ? "text-neutral-500" : "text-neutral-400"}`}>
+          {count.toLocaleString("en-US")}
+        </span>
+      ) : null}
+      {on && note ? <span className="text-[11px] font-normal text-neutral-400">· {note}</span> : null}
+    </button>
+  );
+}

@@ -4,8 +4,8 @@ import { importLibrary, setOptions } from "@googlemaps/js-api-loader";
 import { MarkerClusterer, type Cluster } from "@googlemaps/markerclusterer";
 import type { Geo, MapColonia, MapZona, PorUbicar, Propuesta, Verificacion, ZonaKind } from "@/lib/mapaZonas";
 import { contains, shapeOf, type ZoneShape } from "@/lib/geoContains";
-import { PillSelect, PillTray, Toolbar } from "@/components/Pills";
-import { ZonasPanel, zonaLabel, KIND_LABEL, type PanelTab, type ZoneCounts } from "@/components/ZonasPanel";
+import { LayerPill, PillSelect, PillTray, Toolbar } from "@/components/Pills";
+import { KindSwatch, ZonasPanel, zonaLabel, KIND_LABEL, type PanelTab, type ZoneCounts } from "@/components/ZonasPanel";
 import { ZonaEditor, type EditState } from "@/components/ZonaEditor";
 import { useZonaEditor, type Evidence, type Ring } from "@/components/useZonaEditor";
 import { borrarZona, crearZona, crearZonaDibujada, guardarZona, ignorarNombre } from "@/app/actions";
@@ -891,13 +891,14 @@ export function ZonasClient({
       });
       zoneLabels.current.set(z.key, { marker, kind: z.kind });
     });
-    // First load of an estado frames its named zones (Google ones can span
-    // 1,000+ km², so they never set the view).
+    // First load of an estado frames its named zones — not Google's (they can
+    // span 1,000+ km²) and not the municipio-wide ones (San Martín Texmelucan,
+    // Atlixco…): those pulled the view out until Puebla was a speck.
     if (zonas && framedEstado.current !== estado) {
       framedEstado.current = estado;
       const pts: [number, number][] = [];
       for (const z of zonas)
-        if (z.kind !== "google") {
+        if (z.kind !== "google" && z.km2 <= 30) {
           const [w, so, e, n] = shapes.get(z.key)!.bbox;
           pts.push([w, so], [e, n]);
         }
@@ -993,21 +994,60 @@ export function ZonasClient({
   };
 
   return (
-    <div className="flex flex-1 flex-col">
+    <div className="flex min-h-0 flex-1 flex-col">
       <Toolbar>
-        <PillTray>
-          <PillSelect
-            value={estado}
-            onChange={changeEstado}
-            ariaLabel="Estado"
-            options={[["", "Elige un estado"], ...states.map((s) => [s, s] as [string, string])]}
-          />
-        </PillTray>
-        <p className="hidden text-xs text-neutral-500 md:block">
-          Las zonas son los nombres que usan los brokers. Toca una para verla; edítala desde su tarjeta.
-        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <PillTray>
+            <PillSelect
+              value={estado}
+              onChange={changeEstado}
+              ariaLabel="Estado"
+              options={[["", "Elige un estado"], ...states.map((s) => [s, s] as [string, string])]}
+            />
+          </PillTray>
+          {zonas ? (
+            <div className="flex flex-wrap items-center gap-1.5">
+              {(["curada", "familia", "google"] as ZonaKind[]).map((k) => (
+                <LayerPill
+                  key={k}
+                  on={kinds[k]}
+                  onClick={() => setKinds((v) => ({ ...v, [k]: !v[k] }))}
+                  label={k === "curada" ? "A mano" : k === "familia" ? "Automáticas" : "Google"}
+                  count={zonas.filter((z) => z.kind === k).length}
+                  title={`${KIND_LABEL[k].title}: ${KIND_LABEL[k].hint}`}
+                  swatch={<KindSwatch kind={k} />}
+                />
+              ))}
+              <LayerPill
+                on={showColonias}
+                onClick={() => setShowColonias((v) => !v)}
+                label="Colonias INEGI"
+                note={coloniasNote}
+                title="Los polígonos oficiales de lo que está a la vista. Gris = se reconoce por su nombre; ámbar = el nombre se repite en el estado."
+                swatch={<span className="inline-block h-3 w-3 rounded-sm border border-dashed border-neutral-500" />}
+              />
+              <LayerPill
+                on={fuera}
+                onClick={() => setFuera((v) => !v)}
+                label="Por ubicar"
+                count={porUbicar?.filter((p) => p.lat != null).length ?? 0}
+                title="Propiedades con pin cuya ubicación necesita revisión, en rojo. La lista completa está en la pestaña «Por ubicar»."
+                swatch={<span className="inline-block h-2.5 w-2.5 rounded-full bg-rose-600" />}
+              />
+            </div>
+          ) : null}
+        </div>
+        {zonas ? (
+          <button
+            type="button"
+            onClick={startNew}
+            className="inline-flex h-8 items-center gap-1 rounded-full bg-brand px-3.5 text-[13px] font-semibold text-white shadow-sm hover:opacity-90"
+          >
+            <span aria-hidden>＋</span> Nueva zona
+          </button>
+        ) : null}
       </Toolbar>
-      <div className="relative flex flex-1" style={{ minHeight: "calc(100vh - 140px)" }}>
+      <div className="relative flex min-h-0 flex-1">
         <div className="relative flex-1">
           <div ref={mapEl} className="absolute inset-0" />
           {ready ? (
@@ -1018,6 +1058,31 @@ export function ZonasClient({
             >
               {panelOpen ? "Cerrar panel" : `Zonas${zonas ? ` · ${zonas.length}` : ""}`}
             </button>
+          ) : null}
+          {ready && zonas ? (
+            <div className="pointer-events-none absolute bottom-6 left-3 z-10 rounded-xl border border-black/[0.06] bg-white/95 px-3 py-2 text-[11px] leading-5 text-neutral-600 shadow-sm backdrop-blur">
+              {kinds.curada ? (
+                <div className="flex items-center gap-2"><span className="inline-block h-2.5 w-4 rounded-sm border-2 border-blue-600 bg-blue-600/25" /> Zona hecha a mano</div>
+              ) : null}
+              {kinds.familia ? (
+                <div className="flex items-center gap-2"><span className="inline-block h-2.5 w-4 rounded-sm border border-cyan-600 bg-cyan-600/10" /> Zona automática</div>
+              ) : null}
+              {kinds.google ? (
+                <div className="flex items-center gap-2"><span className="inline-block h-2.5 w-4 rounded-sm border border-neutral-400 bg-neutral-400/10" /> De Google · sin revisar</div>
+              ) : null}
+              {tab === "propuestas" && !edit ? (
+                <div className="flex items-center gap-2"><span className="inline-block h-2.5 w-4 rounded-sm border-2 border-violet-600 bg-violet-600/10" /> Propuesta</div>
+              ) : null}
+              {coloniasOn ? (
+                <>
+                  <div className="flex items-center gap-2"><span className="inline-block h-0 w-4 border-t border-neutral-600" /> Colonia INEGI</div>
+                  <div className="flex items-center gap-2"><span className="inline-block h-0 w-4 border-t-2 border-amber-600" /> Nombre repetido en el estado</div>
+                </>
+              ) : null}
+              {fuera ? (
+                <div className="flex items-center gap-2"><span className="inline-block h-2.5 w-2.5 rounded-full bg-rose-600" /> Propiedad por ubicar</div>
+              ) : null}
+            </div>
           ) : null}
           {!KEY || authFail ? (
             <div className="absolute inset-0 flex items-center justify-center bg-neutral-50 p-8 text-center text-sm text-neutral-600">
@@ -1030,7 +1095,7 @@ export function ZonasClient({
           ) : null}
         </div>
         <div
-          className={`${panelOpen ? "absolute inset-y-0 right-0 z-20 flex w-[min(360px,100%)] shadow-xl" : "hidden"} lg:static lg:flex lg:w-[360px] lg:shadow-none`}
+          className={`${panelOpen ? "absolute inset-y-0 right-0 z-20 flex w-[min(400px,100%)] shadow-xl" : "hidden"} lg:static lg:flex lg:w-[400px] lg:shadow-none`}
         >
           <ZonasPanel
             estado={estado}
@@ -1038,20 +1103,13 @@ export function ZonasClient({
             loading={zLoading}
             error={zError}
             kinds={kinds}
-            onKind={(k) => setKinds((v) => ({ ...v, [k]: !v[k] }))}
             colorOf={zoneColor}
             counts={counts}
             coverage={{ total: estadoListings.length, dentro: estadoListings.length - outside.length }}
-            colonias={showColonias}
-            onColonias={() => setShowColonias((v) => !v)}
-            coloniasNote={coloniasNote}
-            fuera={fuera}
-            onFuera={() => setFuera((v) => !v)}
             selected={selected}
             onSelect={setSelected}
             onHover={setHovered}
             pendientes={pendientes}
-            onNew={startNew}
             onEdit={startEdit}
             onFailure={startFailure}
             flash={flash}

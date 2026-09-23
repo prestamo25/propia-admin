@@ -68,20 +68,13 @@ export function ZonasPanel({
   loading,
   error,
   kinds,
-  onKind,
   colorOf,
   counts,
   coverage,
-  colonias,
-  onColonias,
-  coloniasNote,
-  fuera,
-  onFuera,
   selected,
   onSelect,
   onHover,
   pendientes,
-  onNew,
   onEdit,
   onFailure,
   editor,
@@ -101,20 +94,13 @@ export function ZonasPanel({
   loading: boolean;
   error: string | null;
   kinds: Record<ZonaKind, boolean>;
-  onKind: (k: ZonaKind) => void;
   colorOf: (z: MapZona) => string;
   counts: Map<string, ZoneCounts>;
   coverage: { total: number; dentro: number };
-  colonias: boolean;
-  onColonias: () => void;
-  coloniasNote: string | null;
-  fuera: boolean;
-  onFuera: () => void;
   selected: string | null;
   onSelect: (key: string | null) => void;
   onHover: (key: string | null) => void;
   pendientes: Failure[] | null;
-  onNew: () => void;
   onEdit: (key: string) => void;
   onFailure: (f: Failure) => void;
   /** while a zone is being edited, the editor takes over the panel body */
@@ -173,85 +159,36 @@ export function ZonasPanel({
   const pct = coverage.total ? Math.round((coverage.dentro / coverage.total) * 100) : 0;
   const nTraslapes = (zonas ?? []).filter((z) => z.traslapes.length).length;
 
+  const nPorRevisar = [...verifs.values()].filter((v) => v.veredicto !== "confirmar" && !v.aplicada).length;
+  const nPropuestas = propuestas?.filter((p) => p.revision === "pendiente").length ?? 0;
+
   if (editor)
     return <aside className="flex h-full w-full flex-col border-l border-neutral-200 bg-white">{editor}</aside>;
 
   return (
-    <aside className="flex h-full w-full flex-col border-l border-neutral-200 bg-white">
-      {/* header: estado + coverage */}
-      <div className="border-b border-neutral-100 px-4 pb-3 pt-4">
-        <div className="flex items-baseline justify-between gap-2">
-          <h2 className="text-base font-semibold tracking-tight text-neutral-900">
-            Zonas{estado ? ` de ${estado}` : ""}
-          </h2>
-          {zonas ? (
-            <button
-              type="button"
-              onClick={onNew}
-              className="rounded-full bg-brand px-3 py-1 text-xs font-semibold text-white shadow-sm hover:opacity-90"
-            >
-              ＋ Nueva zona
-            </button>
-          ) : null}
-        </div>
-        {flash ? (
-          <p className="mt-2 rounded-lg bg-emerald-50 px-2.5 py-1.5 text-[13px] text-emerald-800">{flash}</p>
-        ) : null}
+    <aside className="flex h-full w-full flex-col border-l border-neutral-200 bg-neutral-50/40">
+      {/* header: estado + three numbers that say where we stand */}
+      <div className="border-b border-neutral-200 bg-white px-4 pb-3 pt-3.5">
+        <h2 className="text-[15px] font-semibold tracking-tight text-neutral-900">
+          {estado ? `Zonas de ${estado}` : "Zonas"}
+        </h2>
         {!estado ? (
-          <p className="mt-2 text-sm text-neutral-500">Elige un estado arriba para ver sus zonas.</p>
+          <p className="mt-1 text-sm text-neutral-500">Elige un estado arriba para ver sus zonas.</p>
         ) : loading ? (
-          <p className="mt-2 text-sm text-neutral-500">Cargando zonas…</p>
+          <p className="mt-1 text-sm text-neutral-500">Cargando zonas…</p>
         ) : error ? (
-          <p className="mt-2 text-sm text-rose-600">{error}</p>
+          <p className="mt-1 text-sm text-rose-600">{error}</p>
         ) : zonas ? (
-          <div className="mt-3 grid grid-cols-2 gap-2">
-            <Stat
-              value={`${pct}%`}
-              label="propiedades dentro de una zona"
-              sub={`${coverage.dentro.toLocaleString("en-US")} de ${coverage.total.toLocaleString("en-US")} con ubicación`}
-            />
-            <Stat
-              value={String(nTraslapes)}
-              label="zonas que se traslapan"
-              sub="sin que una contenga a la otra"
-              warn={nTraslapes > 0}
-            />
+          <div className="mt-2.5 grid grid-cols-3 divide-x divide-neutral-100 rounded-xl border border-neutral-200">
+            <Kpi value={`${pct}%`} label="propiedades en zona" title={`${coverage.dentro.toLocaleString("en-US")} de ${coverage.total.toLocaleString("en-US")} con ubicación`} />
+            <Kpi value={String(nPorRevisar)} label="por revisar" tone={nPorRevisar ? "amber" : undefined} title="Veredictos de la verificación que todavía no se aplican" />
+            <Kpi value={String(nTraslapes)} label="traslapes" tone={nTraslapes ? "amber" : undefined} title="Zonas que se traslapan sin que una contenga a la otra" />
           </div>
         ) : null}
+        {flash ? (
+          <p className="mt-2.5 rounded-lg bg-emerald-50 px-2.5 py-1.5 text-[13px] leading-5 text-emerald-800 ring-1 ring-emerald-100">{flash}</p>
+        ) : null}
       </div>
-
-      {/* what to paint */}
-      {estado && zonas ? (
-        <div className="space-y-1.5 border-b border-neutral-100 px-4 py-3">
-          {(["curada", "familia", "google"] as ZonaKind[]).map((k) => (
-            <Toggle
-              key={k}
-              on={kinds[k]}
-              onClick={() => onKind(k)}
-              label={KIND_LABEL[k].title}
-              count={(zonas ?? []).filter((z) => z.kind === k).length}
-              title={KIND_LABEL[k].hint}
-              swatch={<KindSwatch kind={k} />}
-            />
-          ))}
-          <Toggle
-            on={colonias}
-            onClick={onColonias}
-            label="Colonias INEGI"
-            title="Los polígonos oficiales, sólo de lo que está a la vista. Gris = se reconoce por su nombre; ámbar = el nombre se repite en el estado y sólo se reconoce con el municipio."
-            note={colonias ? coloniasNote : null}
-            swatch={<span className="inline-block h-3 w-3 rounded-sm border border-dashed border-neutral-500" />}
-          />
-          <Toggle
-            on={fuera}
-            onClick={onFuera}
-            label="Propiedades por ubicar"
-            count={porUbicar?.filter((p) => p.lat != null).length ?? 0}
-            title="Pinta en rojo las propiedades con pin cuya ubicación necesita revisión (hueco del INEGI o colonia lejos del pin). La lista completa está en la pestaña «Por ubicar»."
-            swatch={<span className="inline-block h-3 w-3 rounded-full bg-rose-600" />}
-          />
-        </div>
-      ) : null}
 
       {/* selected zone */}
       {sel ? (
@@ -269,30 +206,33 @@ export function ZonasPanel({
         />
       ) : null}
 
-      {/* list */}
       {estado && zonas ? (
         <div className="flex min-h-0 flex-1 flex-col">
-          <div className="flex gap-1 px-4 pt-3">
-            {(
-              [
-                ["zonas", "Zonas", zonas.length],
-                ["propuestas", "Propuestas", propuestas?.filter((p) => p.revision === "pendiente").length ?? 0],
-                ["pendientes", "Sin resolver", pendientes?.length ?? 0],
-                ["ubicar", "Por ubicar", porUbicar?.length ?? 0],
-              ] as const
-            ).map(([t, label, n]) => (
-              <button
-                key={t}
-                type="button"
-                onClick={() => setTab(t)}
-                className={`rounded-full px-3 py-1 text-sm font-medium transition ${
-                  tab === t ? "bg-neutral-900 text-white" : "text-neutral-500 hover:bg-neutral-100"
-                }`}
-              >
-                {label}{" "}
-                <span className={`tabular-nums ${tab === t ? "text-white/70" : "text-neutral-400"}`}>{n}</span>
-              </button>
-            ))}
+          {/* tabs: one track, four equal segments */}
+          <div className="px-3 pt-3">
+            <div className="grid grid-cols-4 gap-1 rounded-xl bg-neutral-100 p-1">
+              {(
+                [
+                  ["zonas", "Zonas", zonas.length],
+                  ["propuestas", "Propuestas", nPropuestas],
+                  ["pendientes", "Sin resolver", pendientes?.length ?? 0],
+                  ["ubicar", "Por ubicar", porUbicar?.length ?? 0],
+                ] as const
+              ).map(([t, label, n]) => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => setTab(t)}
+                  aria-pressed={tab === t}
+                  className={`flex flex-col items-center rounded-lg px-1 py-1.5 transition ${
+                    tab === t ? "bg-white text-neutral-900 shadow-sm" : "text-neutral-500 hover:text-neutral-800"
+                  }`}
+                >
+                  <span className="text-[15px] font-semibold leading-5 tabular-nums">{n}</span>
+                  <span className="whitespace-nowrap text-[11px] leading-4">{label}</span>
+                </button>
+              ))}
+            </div>
           </div>
           {tab === "pendientes" ? (
             <Pendientes items={pendientes} onPick={onFailure} />
@@ -301,104 +241,103 @@ export function ZonasPanel({
           ) : tab === "ubicar" ? (
             <PorUbicarList items={porUbicar} onFocus={onFocusPoint} />
           ) : (
-          <>
-          <div className="px-4 pt-3">
-            <input
-              type="search"
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="Buscar zona o municipio"
-              className="h-9 w-full rounded-full border border-neutral-300 bg-white px-3.5 text-sm text-neutral-900 outline-none ring-brand/40 placeholder:text-neutral-400 focus:ring-2"
-            />
-          </div>
-          <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-4 pt-2">
-            {(["curada", "familia", "google"] as ZonaKind[]).map((k) => {
-              const rows = groups[k];
-              const isOpen = open[k] || !!q.trim();
-              return (
-                <section key={k} className="mt-1">
-                  <button
-                    type="button"
-                    onClick={() => setOpen((o) => ({ ...o, [k]: !o[k] }))}
-                    className="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left text-[11px] font-semibold uppercase tracking-wider text-neutral-400 hover:bg-neutral-50"
-                  >
-                    <span>
-                      {isOpen ? "▾" : "▸"} {KIND_LABEL[k].title}
-                    </span>
-                    <span className="tabular-nums">{rows.length}</span>
-                  </button>
-                  {isOpen ? (
-                    rows.length ? (
-                      <ul>
-                        {rows.map(({ z, depth }) => {
-                          const c = counts.get(z.key);
-                          const active = z.key === selected;
-                          return (
-                            <li key={z.key}>
-                              <button
-                                type="button"
-                                onClick={() => onSelect(active ? null : z.key)}
-                                onMouseEnter={() => onHover(z.key)}
-                                onMouseLeave={() => onHover(null)}
-                                className={`flex w-full items-center gap-2 rounded-lg py-1.5 pr-2 text-left text-sm transition ${
-                                  active ? "bg-brand-light" : "hover:bg-neutral-50"
-                                }`}
-                                style={{ paddingLeft: 8 + depth * 16 }}
-                              >
-                                {depth ? <span className="text-neutral-300">└</span> : null}
-                                <span
-                                  className="inline-block h-3 w-3 shrink-0 rounded-sm"
-                                  style={{ background: colorOf(z), opacity: kinds[z.kind] ? 1 : 0.35 }}
-                                />
-                                <span className="min-w-0 flex-1">
-                                  <span className="block truncate font-medium text-neutral-800">
-                                    {zonaLabel(z.nombre)}
-                                  </span>
-                                  <span className="block truncate text-[11px] text-neutral-400">
-                                    {z.municipio}
-                                  </span>
-                                </span>
-                                {verifs.get(`z:${z.key}`) && verifs.get(`z:${z.key}`)!.veredicto !== "confirmar" ? (
-                                  <VeredictoBadge v={verifs.get(`z:${z.key}`)!} />
-                                ) : null}
-                                {z.requerimientos ? (
-                                  <span
-                                    title={`${z.requerimientos} requerimiento${z.requerimientos === 1 ? "" : "s"} abierto${z.requerimientos === 1 ? "" : "s"} la usa${z.requerimientos === 1 ? "" : "n"}`}
-                                    className="rounded-full bg-sky-50 px-1.5 text-[11px] font-semibold tabular-nums text-sky-700"
+            <>
+              <div className="px-3 pt-3">
+                <input
+                  type="search"
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  placeholder="Buscar zona o municipio"
+                  className="h-9 w-full rounded-lg border border-neutral-200 bg-white px-3 text-sm text-neutral-900 outline-none ring-brand/40 placeholder:text-neutral-400 focus:ring-2"
+                />
+              </div>
+              <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-6 pt-2">
+                {(["curada", "familia", "google"] as ZonaKind[]).map((k) => {
+                  const rows = groups[k];
+                  const isOpen = open[k] || !!q.trim();
+                  return (
+                    <section key={k} className="mt-2">
+                      <button
+                        type="button"
+                        onClick={() => setOpen((o) => ({ ...o, [k]: !o[k] }))}
+                        className="sticky top-0 z-[1] flex w-full items-center gap-2 bg-neutral-50/95 px-1 py-1.5 text-left backdrop-blur"
+                      >
+                        <KindSwatch kind={k} />
+                        <span className="flex-1 text-[11px] font-semibold uppercase tracking-wider text-neutral-500">
+                          {KIND_LABEL[k].title}
+                        </span>
+                        <span className="text-[11px] tabular-nums text-neutral-400">{rows.length}</span>
+                        <span className="w-3 text-[11px] text-neutral-400">{isOpen ? "▾" : "▸"}</span>
+                      </button>
+                      {isOpen ? (
+                        rows.length ? (
+                          <ul className="overflow-hidden rounded-xl border border-neutral-200 bg-white">
+                            {rows.map(({ z, depth }) => {
+                              const c = counts.get(z.key);
+                              const active = z.key === selected;
+                              const v = verifs.get(`z:${z.key}`);
+                              const showVerdict = v && v.veredicto !== "confirmar" && !v.aplicada;
+                              return (
+                                <li key={z.key} className="border-b border-neutral-100 last:border-b-0">
+                                  <button
+                                    type="button"
+                                    onClick={() => onSelect(active ? null : z.key)}
+                                    onMouseEnter={() => onHover(z.key)}
+                                    onMouseLeave={() => onHover(null)}
+                                    className={`flex w-full items-center gap-2.5 py-2 pr-3 text-left transition ${
+                                      active ? "bg-brand-light" : "hover:bg-neutral-50"
+                                    }`}
+                                    style={{ paddingLeft: 10 + depth * 14 }}
                                   >
-                                    {z.requerimientos} req
-                                  </span>
-                                ) : null}
-                                {z.traslapes.length ? (
-                                  <span
-                                    title={`Se traslapa con ${z.traslapes.length}`}
-                                    className="rounded-full bg-amber-50 px-1.5 text-[11px] font-semibold text-amber-700"
-                                  >
-                                    ⚠
-                                  </span>
-                                ) : null}
-                                <span className="w-8 shrink-0 text-right text-xs tabular-nums text-neutral-500">
-                                  {c?.props ?? 0}
-                                </span>
-                              </button>
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    ) : (
-                      <p className="px-2 py-1 text-xs text-neutral-400">
-                        {q.trim() ? "Nada con ese nombre." : "Ninguna todavía."}
-                      </p>
-                    )
-                  ) : null}
-                </section>
-              );
-            })}
-            <p className="mt-3 px-2 text-[11px] leading-4 text-neutral-400">
-              El número a la derecha = propiedades con ubicación que caen dentro de la zona.
-            </p>
-          </div>
-          </>
+                                    <span
+                                      className="h-8 w-1 shrink-0 rounded-full"
+                                      style={{ background: colorOf(z), opacity: kinds[z.kind] ? 1 : 0.35 }}
+                                    />
+                                    <span className="min-w-0 flex-1">
+                                      <span className="flex items-center gap-1 truncate text-[13.5px] font-medium text-neutral-900">
+                                        {depth ? <span className="text-neutral-300">↳</span> : null}
+                                        {zonaLabel(z.nombre)}
+                                      </span>
+                                      <span className="block truncate text-[11.5px] text-neutral-500">
+                                        {z.municipio}
+                                        <span className="text-neutral-300"> · </span>
+                                        {(c?.props ?? 0).toLocaleString("en-US")} props
+                                        {z.requerimientos ? (
+                                          <>
+                                            <span className="text-neutral-300"> · </span>
+                                            <span className="text-sky-700">{z.requerimientos} req</span>
+                                          </>
+                                        ) : null}
+                                      </span>
+                                    </span>
+                                    {showVerdict ? (
+                                      <VeredictoBadge v={v!} />
+                                    ) : z.traslapes.length ? (
+                                      <span
+                                        title={`Se traslapa con ${z.traslapes.length}`}
+                                        className="rounded-full bg-amber-50 px-1.5 text-[10px] font-semibold text-amber-700 ring-1 ring-amber-200"
+                                      >
+                                        Traslape
+                                      </span>
+                                    ) : v?.veredicto === "confirmar" ? (
+                                      <span title="Verificada" className="text-[12px] text-emerald-600">✓</span>
+                                    ) : null}
+                                  </button>
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        ) : (
+                          <p className="px-1 py-1 text-xs text-neutral-400">
+                            {q.trim() ? "Nada con ese nombre." : "Ninguna todavía."}
+                          </p>
+                        )
+                      ) : null}
+                    </section>
+                  );
+                })}
+              </div>
+            </>
           )}
         </div>
       ) : null}
@@ -445,7 +384,7 @@ function ZoneCard({
     xs.flatMap((o, i) => (i ? [<span key={`s${o.key}`}>, </span>, link(o)] : [link(o)]));
 
   return (
-    <div className="border-b border-neutral-100 bg-neutral-50/60 px-4 py-3">
+    <div className="border-b border-neutral-200 bg-white px-4 py-3.5" style={{ boxShadow: `inset 3px 0 0 ${color}` }}>
       <div className="flex items-start gap-2">
         <span className="mt-1 inline-block h-3.5 w-3.5 shrink-0 rounded-sm" style={{ background: color }} />
         <div className="min-w-0 flex-1">
@@ -696,12 +635,13 @@ function Pendientes({ items, onPick }: { items: Failure[] | null; onPick: (f: Fa
   );
 }
 
-function Stat({ value, label, sub, warn }: { value: string; label: string; sub: string; warn?: boolean }) {
+function Kpi({ value, label, tone, title }: { value: string; label: string; tone?: "amber"; title?: string }) {
   return (
-    <div className="rounded-xl border border-neutral-200 px-3 py-2">
-      <b className={`block text-xl font-semibold tabular-nums ${warn ? "text-amber-600" : "text-neutral-900"}`}>{value}</b>
-      <span className="block text-[11px] leading-4 text-neutral-600">{label}</span>
-      <span className="block text-[11px] leading-4 text-neutral-400">{sub}</span>
+    <div title={title} className="px-2 py-1.5 text-center">
+      <b className={`block text-[17px] font-semibold leading-6 tabular-nums ${tone === "amber" ? "text-amber-600" : "text-neutral-900"}`}>
+        {value}
+      </b>
+      <span className="block text-[10.5px] leading-3 text-neutral-500">{label}</span>
     </div>
   );
 }
@@ -715,49 +655,7 @@ function Mini({ value, label }: { value: string; label: string }) {
   );
 }
 
-function Toggle({
-  on,
-  onClick,
-  label,
-  count,
-  title,
-  note,
-  swatch,
-}: {
-  on: boolean;
-  onClick: () => void;
-  label: string;
-  count?: number;
-  title?: string;
-  note?: string | null;
-  swatch: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={on}
-      title={title}
-      className="flex w-full items-center gap-2.5 rounded-lg px-1 py-1 text-left text-sm hover:bg-neutral-50"
-    >
-      <span
-        className={`grid h-4 w-4 shrink-0 place-items-center rounded border text-[10px] font-bold ${
-          on ? "border-neutral-900 bg-neutral-900 text-white" : "border-neutral-300 bg-white text-transparent"
-        }`}
-      >
-        ✓
-      </span>
-      <span className={on ? "" : "opacity-40"}>{swatch}</span>
-      <span className={`flex-1 ${on ? "text-neutral-800" : "text-neutral-500"}`}>
-        {label}
-        {note ? <span className="block text-[11px] text-neutral-400">{note}</span> : null}
-      </span>
-      {count != null ? <span className="text-xs tabular-nums text-neutral-400">{count}</span> : null}
-    </button>
-  );
-}
-
-function KindSwatch({ kind }: { kind: ZonaKind }) {
+export function KindSwatch({ kind }: { kind: ZonaKind }) {
   if (kind === "google")
     return <span className="inline-block h-3 w-3 rounded-sm border border-neutral-400 bg-neutral-200" />;
   const colors = kind === "curada" ? ["#2563eb", "#16a34a", "#d97706"] : ["#0891b2", "#9333ea"];

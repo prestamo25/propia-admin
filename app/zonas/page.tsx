@@ -38,7 +38,8 @@ export default async function ZonasPage() {
   ];
 
   return (
-    <div className="flex min-h-screen flex-col">
+    // exactly one screen tall: the map never scrolls away, only the panel's list does
+    <div className="flex h-dvh flex-col overflow-hidden">
       <TopNav active="zonas" />
       <ZonasClient states={data.states} listings={listings} demand={demand} />
     </div>
