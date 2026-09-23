@@ -52,3 +52,39 @@ export async function fetchMapaColonias(
   if (error) throw new Error(error.message);
   return (data ?? []) as MapColonia[];
 }
+
+// Propuestas (2026-09-23): draft zones mined from how brokers name places.
+// Nothing here touches matching until someone approves one in the editor.
+export type PropuestaTipo = "familia" | "colonias" | "localidad" | "municipio" | "pins" | "dibujar";
+
+export type Propuesta = {
+  id: number;
+  nombre: string;
+  sinonimos: string[];
+  tipo: PropuestaTipo;
+  n_miembros: number;
+  menciones: { wa?: number; prop?: number; perfil?: number; req?: number };
+  total: number;
+  brokers: number;
+  pins: [number, number][];
+  nota: string | null;
+  revision: "pendiente" | "aprobada" | "descartada";
+  zona_key: string | null;
+  /** an existing zone with the same name or the same members */
+  existe: { key: string; miembros: number; igual: boolean } | null;
+  geom: Geo | null;
+};
+
+export async function fetchPropuestas(estado: string): Promise<Propuesta[]> {
+  const sb = supabaseAdmin();
+  const { data, error } = await sb.rpc("admin_zona_propuestas", { p_estado: estado });
+  if (error) throw new Error(error.message);
+  return (data ?? []) as Propuesta[];
+}
+
+export async function fetchPropuestaMiembros(id: number): Promise<MapColonia[]> {
+  const sb = supabaseAdmin();
+  const { data, error } = await sb.rpc("admin_zona_propuesta_miembros", { p_id: id });
+  if (error) throw new Error(error.message);
+  return (data ?? []) as MapColonia[];
+}

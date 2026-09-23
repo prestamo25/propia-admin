@@ -2,13 +2,14 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { importLibrary, setOptions } from "@googlemaps/js-api-loader";
 import { MarkerClusterer, type Cluster } from "@googlemaps/markerclusterer";
-import type { Geo, MapColonia, MapZona, ZonaKind } from "@/lib/mapaZonas";
+import type { Geo, MapColonia, MapZona, Propuesta, ZonaKind } from "@/lib/mapaZonas";
 import { contains, shapeOf, type ZoneShape } from "@/lib/geoContains";
 import { PillSelect, PillTray, Toolbar } from "@/components/Pills";
-import { ZonasPanel, zonaLabel, KIND_LABEL, type ZoneCounts } from "@/components/ZonasPanel";
+import { ZonasPanel, zonaLabel, KIND_LABEL, type PanelTab, type ZoneCounts } from "@/components/ZonasPanel";
 import { ZonaEditor, type EditState } from "@/components/ZonaEditor";
 import { useZonaEditor, type Evidence, type Ring } from "@/components/useZonaEditor";
 import { borrarZona, crearZona, crearZonaDibujada, guardarZona, ignorarNombre } from "@/app/actions";
+import { marcarPropuesta } from "@/app/zonas/actions";
 import type { CandidateSet, Failure, ZonaDetail } from "@/lib/zonas";
 
 // «Zonas» (Franz 2026-09-23): its own page, deliberately apart from «Mapa» —
@@ -26,6 +27,7 @@ const KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY ?? "";
 const ZONE_PALETTE = ["#2563eb", "#16a34a", "#d97706", "#9333ea", "#0891b2", "#db2777", "#65a30d", "#ea580c", "#4f46e5", "#0d9488"];
 const GOOGLE_GREY = "#737373";
 const OUTSIDE = "#e11d48";
+const PROPUESTA = "#7c3aed";
 const ZONE_WEIGHT: Record<ZonaKind, { w: number; op: number }> = {
   curada: { w: 2.6, op: 0.22 },
   familia: { w: 1.6, op: 0.12 },
@@ -118,6 +120,10 @@ export function ZonasClient({
   const zoneLabels = useRef<Map<string, { marker: google.maps.Marker; kind: ZonaKind }>>(new Map());
   const coloniaReset = useRef<(() => void) | null>(null);
   const outsideCl = useRef<MarkerClusterer | null>(null);
+  // draft zones, painted only while the «Propuestas» tab is open
+  const propLayer = useRef<google.maps.Data | null>(null);
+  const propById = useRef(new Map<number, Propuesta>());
+  const startPropRef = useRef<(p: Propuesta) => void>(() => {});
   const framedEstado = useRef<string | null>(null);
   const [ready, setReady] = useState(false);
   const [authFail, setAuthFail] = useState(false);
@@ -143,6 +149,8 @@ export function ZonasClient({
   const [pending, startTransition] = useTransition();
   const [reloadTick, setReloadTick] = useState(0);
   const [pendientes, setPendientes] = useState<Failure[] | null>(null);
+  const [propuestas, setPropuestas] = useState<Propuesta[] | null>(null);
+  const [tab, setTab] = useState<PanelTab>("zonas");
   // every colonia geometry seen (viewport, members, candidates) — a pick
   // must be drawable after the viewport that showed it has moved on
   const geomCache = useRef(new Map<string, { nombre: string; municipio: string; geom: Geo }>());
@@ -168,6 +176,7 @@ export function ZonasClient({
     setEdit(null);
     setEvidence(null);
     setPendientes(null);
+    setPropuestas(null);
     setFlash(null);
   };
   useEffect(() => {
@@ -196,6 +205,18 @@ export function ZonasClient({
       .then((rows: Failure[]) => setPendientes(rows))
       .catch(() => {
         if (!ac.signal.aborted) setPendientes([]);
+      });
+    return () => ac.abort();
+  }, [estado, reloadTick]);
+
+  useEffect(() => {
+    if (!estado) return;
+    const ac = new AbortController();
+    fetch(`/api/zonas/propuestas?estado=${encodeURIComponent(estado)}&t=${reloadTick}`, { signal: ac.signal })
+      .then((r) => (r.ok ? r.json() : []))
+      .then((rows: Propuesta[]) => setPropuestas(rows))
+      .catch(() => {
+        if (!ac.signal.aborted) setPropuestas([]);
       });
     return () => ac.abort();
   }, [estado, reloadTick]);
@@ -255,7 +276,7 @@ export function ZonasClient({
 
   const blankEdit = (over: Partial<EditState>): EditState => ({
     key: null, kind: null, nombre: "", modo: "miembros", picked: [], geoms: {}, ring: null,
-    drawing: false, seed: null, failure: null, props: 0, ...over,
+    drawing: false, seed: null, failure: null, props: 0, propuesta: null, ...over,
   });
   const cache = (rows: { key: string; nombre: string; municipio: string; geom: Geo }[]) => {
     for (const r of rows) geomCache.current.set(r.key, { nombre: r.nombre, municipio: r.municipio, geom: r.geom });
@@ -360,6 +381,84 @@ export function ZonasClient({
     }
   }
 
+  // A draft opens as a pre-filled edit: its colonias picked (or draw mode with
+  // its pins as guide). If a zone with that name already exists, the draft's
+  // colonias are ADDED to it so saving updates the zone instead of forking it.
+  async function startPropuesta(p: Propuesta) {
+    const seq = ++editSeq.current;
+    setMsg(null);
+    setFlash(null);
+    setSelected(null);
+    setPanelOpen(true);
+    const pinsEv: Evidence = { pins: p.pins, polys: [] };
+    if (p.tipo === "dibujar" || !p.n_miembros) {
+      setEdit(blankEdit({ nombre: p.nombre, modo: "dibujo", drawing: true, propuesta: p }));
+      setEvidence(pinsEv);
+      frame(p.pins);
+      return;
+    }
+    setEvidence(null);
+    setEditLoading(true);
+    setEdit(blankEdit({ nombre: p.nombre, propuesta: p }));
+    try {
+      const r = await fetch(`/api/zonas/propuestas/miembros?id=${p.id}`);
+      const rows = await r.json();
+      if (seq !== editSeq.current) return;
+      if (!r.ok) throw new Error(rows?.error ?? `HTTP ${r.status}`);
+      const members = rows as MapColonia[];
+      cache(members);
+      let next = blankEdit({
+        nombre: p.nombre,
+        picked: members.map((m) => m.key),
+        geoms: Object.fromEntries(members.map((m) => [m.key, m])),
+        propuesta: p,
+      });
+      if (p.existe && !p.existe.igual) {
+        const r2 = await fetch(`/api/zonas/detalle?key=${encodeURIComponent(p.existe.key)}`);
+        const det = (await r2.json()) as ZonaDetail;
+        if (seq !== editSeq.current) return;
+        if (r2.ok && !det.dibujada) {
+          cache(det.miembros);
+          const picked = Array.from(new Set([...det.miembros.map((m) => m.key), ...next.picked]));
+          next = {
+            ...next,
+            key: det.key,
+            kind: byKey.get(det.key)?.kind ?? null,
+            nombre: zonaLabel(det.nombre),
+            props: det.props,
+            picked,
+            geoms: { ...next.geoms, ...Object.fromEntries(det.miembros.map((m) => [m.key, m])) },
+          };
+        }
+      }
+      setEdit(next);
+      setEvidence(pinsEv);
+      const pts: [number, number][] = [...p.pins];
+      for (const m of members) {
+        const [w, so, e, n] = shapeOf(m.geom).bbox;
+        pts.push([w, so], [e, n]);
+      }
+      frame(pts);
+    } catch (e) {
+      if (seq === editSeq.current) setMsg({ ok: false, text: e instanceof Error ? e.message : "No se pudo cargar la propuesta." });
+    } finally {
+      if (seq === editSeq.current) setEditLoading(false);
+    }
+  }
+  useEffect(() => {
+    startPropRef.current = startPropuesta;
+  });
+
+  function discardPropuesta() {
+    const p = edit?.propuesta;
+    if (!p) return;
+    startTransition(async () => {
+      const res = await marcarPropuesta(p.id, "descartada", null);
+      if (res.error) setMsg({ ok: false, text: res.error });
+      else afterWrite(`Propuesta «${p.nombre}» descartada.`, null);
+    });
+  }
+
   function cancelEdit() {
     editSeq.current++;
     setEdit(null);
@@ -398,12 +497,22 @@ export function ZonasClient({
               ? await guardarZona(e.key, e.nombre, estado, { miembros: e.picked })
               : { error: "Una zona necesita al menos una colonia." };
       }
-      if (res.error) setMsg({ ok: false, text: res.error });
-      else
-        afterWrite(
-          `${e.key === null ? "Zona creada" : "Zona actualizada"} · ${plural(res.movidas ?? 0)}.`,
-          e.key ?? res.key ?? null,
-        );
+      if (res.error) {
+        setMsg({ ok: false, text: res.error });
+        return;
+      }
+      const key = e.key ?? res.key ?? null;
+      if (e.propuesta) {
+        const m = await marcarPropuesta(e.propuesta.id, "aprobada", key);
+        if (m.error) {
+          setMsg({ ok: false, text: `La zona se guardó, pero la propuesta no se pudo cerrar: ${m.error}` });
+          return;
+        }
+      }
+      afterWrite(
+        `${e.propuesta ? "Propuesta aprobada · " : ""}${e.key === null ? "Zona creada" : "Zona actualizada"} · ${plural(res.movidas ?? 0)}.`,
+        key,
+      );
     });
   }
 
@@ -575,6 +684,25 @@ export function ZonasClient({
           setSelected(hit ? hit.key : null);
         });
         coloniaLayer.current = col;
+
+        // Draft zones: violet outlines under the INEGI lines, only while the
+        // «Propuestas» tab is open. A click opens the draft in the editor.
+        const prop = new google.maps.Data();
+        prop.setStyle({ strokeColor: PROPUESTA, strokeWeight: 2, strokeOpacity: 0.9, fillColor: PROPUESTA, fillOpacity: 0.1, zIndex: 15000 });
+        prop.addListener("mouseover", (e: google.maps.Data.MouseEvent) => {
+          prop.overrideStyle(e.feature, { fillOpacity: 0.25, strokeWeight: 3 });
+          const p = propById.current.get(e.feature.getProperty("id") as number);
+          if (p) tip(`<b>${esc(p.nombre)}</b> <span style="color:${PROPUESTA}">· propuesta</span><br><span style="color:#737373">${p.total} menciones · click para revisarla</span>`, e.latLng);
+        });
+        prop.addListener("mouseout", (e: google.maps.Data.MouseEvent) => {
+          prop.revertStyle(e.feature);
+          zoneTip.current?.close();
+        });
+        prop.addListener("click", (e: google.maps.Data.MouseEvent) => {
+          const p = propById.current.get(e.feature.getProperty("id") as number);
+          if (p) startPropRef.current(p);
+        });
+        propLayer.current = prop;
         let loadedBox: google.maps.LatLngBounds | null = null;
         let loadedEstado = "";
         let seq = 0;
@@ -718,6 +846,22 @@ export function ZonasClient({
     if (coloniasOn) google.maps.event.trigger(m, "idle");
   }, [ready, coloniasOn, estado]);
 
+  // Pending drafts on the map while their tab is open (hidden during an edit).
+  useEffect(() => {
+    const m = map.current;
+    const prop = propLayer.current;
+    if (!ready || !m || !prop) return;
+    prop.forEach((f) => prop.remove(f));
+    propById.current = new Map((propuestas ?? []).map((p) => [p.id, p]));
+    const show = tab === "propuestas" && !edit;
+    prop.setMap(show ? m : null);
+    if (!show) return;
+    // biggest first so the small ones stay clickable on top
+    const pend = (propuestas ?? []).filter((p) => p.revision === "pendiente" && p.geom);
+    for (const p of pend.sort((a, b) => b.n_miembros - a.n_miembros))
+      prop.addGeoJson({ type: "Feature", geometry: p.geom!, properties: { id: p.id } });
+  }, [ready, propuestas, tab, edit]);
+
   // «Propiedades sin zona»: the only listing pins this page ever shows.
   useEffect(() => {
     const cl = outsideCl.current;
@@ -792,6 +936,10 @@ export function ZonasClient({
             onEdit={startEdit}
             onFailure={startFailure}
             flash={flash}
+            tab={tab}
+            onTab={setTab}
+            propuestas={propuestas}
+            onPropuesta={startPropuesta}
             editor={
               edit ? (
                 <ZonaEditor
@@ -813,6 +961,7 @@ export function ZonasClient({
                   onCancel={cancelEdit}
                   onDelete={deleteEdit}
                   onIgnore={ignoreFailure}
+                  onDiscardPropuesta={discardPropuesta}
                 />
               ) : null
             }

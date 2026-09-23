@@ -2,9 +2,9 @@
 
 import { useState } from "react";
 import type { Failure } from "@/lib/zonas";
-import type { ZonaKind } from "@/lib/mapaZonas";
+import type { Propuesta, ZonaKind } from "@/lib/mapaZonas";
 import type { Evidence, MemberGeo, Ring } from "@/components/useZonaEditor";
-import { zonaLabel, KIND_LABEL } from "@/components/ZonasPanel";
+import { zonaLabel, KIND_LABEL, TIPO_PROPUESTA } from "@/components/ZonasPanel";
 
 // The panel while a zone is being made or changed. Everything it saves goes
 // through the same server actions the Zonas bench used (crearZona,
@@ -26,6 +26,8 @@ export type EditState = {
   failure: Failure | null;
   /** listings the zone holds today (existing zones) */
   props: number;
+  /** set when reviewing a draft from the «Propuestas» tab */
+  propuesta: Propuesta | null;
 };
 
 export function ZonaEditor({
@@ -44,6 +46,7 @@ export function ZonaEditor({
   onCancel,
   onDelete,
   onIgnore,
+  onDiscardPropuesta,
 }: {
   edit: EditState;
   /** listings of the estado the zone would hold as edited */
@@ -61,6 +64,7 @@ export function ZonaEditor({
   onCancel: () => void;
   onDelete: () => void;
   onIgnore: () => void;
+  onDiscardPropuesta: () => void;
 }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const isNew = edit.key === null;
@@ -69,7 +73,9 @@ export function ZonaEditor({
     (edit.modo === "miembros" ? edit.picked.length > 0 : !!edit.ring) &&
     !pending;
 
-  const title = isNew
+  const title = edit.propuesta
+    ? `Propuesta: ${edit.propuesta.nombre}`
+    : isNew
     ? edit.failure
       ? `Resolver «${edit.failure.nombre}»`
       : "Nueva zona"
@@ -82,7 +88,23 @@ export function ZonaEditor({
           <div className="min-w-0">
             <h2 className="text-base font-semibold leading-5 tracking-tight text-neutral-900">{title}</h2>
             <p className="mt-0.5 text-xs text-neutral-500">
-              {edit.failure ? (
+              {edit.propuesta ? (
+                <>
+                  <span className="font-medium text-violet-700">{edit.propuesta.total} menciones</span>
+                  {" · "}
+                  {[
+                    ["wa", "WhatsApp"],
+                    ["prop", "propiedades"],
+                    ["perfil", "perfiles"],
+                    ["req", "requerimientos"],
+                  ]
+                    .filter(([k]) => edit.propuesta!.menciones[k as keyof Propuesta["menciones"]])
+                    .map(([k, label]) => `${edit.propuesta!.menciones[k as keyof Propuesta["menciones"]]} ${label}`)
+                    .join(" · ")}
+                  {" · "}
+                  {TIPO_PROPUESTA[edit.propuesta.tipo]}
+                </>
+              ) : edit.failure ? (
                 <>
                   {edit.failure.props > 0 ? (
                     <span className="font-medium text-rose-600">{edit.failure.props} propiedades sin zona</span>
@@ -122,6 +144,20 @@ export function ZonaEditor({
             className="mt-1 h-9 w-full rounded-lg border border-neutral-300 px-3 text-sm outline-none ring-brand/40 focus:ring-2"
           />
         </label>
+
+        {edit.propuesta?.nota || edit.propuesta?.existe ? (
+          <p className="mt-2 rounded-lg bg-violet-50 px-2.5 py-1.5 text-[12px] leading-4 text-violet-900">
+            {edit.propuesta.existe && !edit.propuesta.existe.igual
+              ? `Ya existe una zona con este nombre (${edit.propuesta.existe.miembros} colonias): aquí la ves con las colonias de la propuesta sumadas. Guardar la actualiza. `
+              : ""}
+            {edit.propuesta.nota ?? ""}
+            {edit.propuesta.sinonimos.length > 1 ? (
+              <span className="mt-1 block text-violet-700/80">
+                También la escriben: {edit.propuesta.sinonimos.slice(1).join(", ")}
+              </span>
+            ) : null}
+          </p>
+        ) : null}
 
         {isNew ? (
           <div className="mt-3 inline-flex rounded-full bg-neutral-100 p-0.5 text-sm">
@@ -271,9 +307,28 @@ export function ZonaEditor({
             disabled={!canSave}
             className="rounded-full bg-brand px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:opacity-90 disabled:opacity-40"
           >
-            {pending ? "Guardando…" : isNew ? "Crear zona" : "Guardar cambios"}
+            {pending
+              ? "Guardando…"
+              : edit.propuesta
+                ? isNew
+                  ? "Aprobar · crear zona"
+                  : "Aprobar · guardar zona"
+                : isNew
+                  ? "Crear zona"
+                  : "Guardar cambios"}
           </button>
-          {!isNew ? (
+          {edit.propuesta && edit.propuesta.revision === "pendiente" ? (
+            <button
+              type="button"
+              onClick={onDiscardPropuesta}
+              disabled={pending}
+              title="No es una zona que queramos — sale de la lista de propuestas"
+              className="rounded-full px-3 py-2 text-sm font-medium text-neutral-500 hover:bg-rose-50 hover:text-rose-600 disabled:opacity-40"
+            >
+              Descartar propuesta
+            </button>
+          ) : null}
+          {!isNew && !edit.propuesta ? (
             confirmDelete ? (
               <span className="inline-flex items-center gap-1 text-sm">
                 <button

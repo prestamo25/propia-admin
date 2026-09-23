@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { MapZona, ZonaKind } from "@/lib/mapaZonas";
+import type { MapZona, Propuesta, PropuestaTipo, ZonaKind } from "@/lib/mapaZonas";
 import type { Failure } from "@/lib/zonas";
 
 // The side panel of the big map: which zones exist in this estado, how they
@@ -34,6 +34,16 @@ export const KIND_LABEL: Record<ZonaKind, { title: string; hint: string }> = {
 };
 
 export type ZoneCounts = { props: number; reqs: number };
+export type PanelTab = "zonas" | "pendientes" | "propuestas";
+
+export const TIPO_PROPUESTA: Record<PropuestaTipo, string> = {
+  familia: "familia de colonias",
+  colonias: "colonias",
+  localidad: "localidad INEGI",
+  municipio: "municipio",
+  pins: "por pins",
+  dibujar: "dibujar",
+};
 
 export function ZonasPanel({
   estado,
@@ -59,6 +69,10 @@ export function ZonasPanel({
   onFailure,
   editor,
   flash,
+  tab,
+  onTab,
+  propuestas,
+  onPropuesta,
 }: {
   estado: string;
   zonas: MapZona[] | null;
@@ -85,9 +99,13 @@ export function ZonasPanel({
   editor: React.ReactNode | null;
   /** last save/delete result, shown until the next action */
   flash: string | null;
+  tab: PanelTab;
+  onTab: (t: PanelTab) => void;
+  propuestas: Propuesta[] | null;
+  onPropuesta: (p: Propuesta) => void;
 }) {
   const [q, setQ] = useState("");
-  const [tab, setTab] = useState<"zonas" | "pendientes">("zonas");
+  const setTab = onTab;
   const [open, setOpen] = useState<Record<ZonaKind, boolean>>({ curada: true, familia: true, google: false });
 
   const byKey = useMemo(() => new Map((zonas ?? []).map((z) => [z.key, z])), [zonas]);
@@ -221,6 +239,7 @@ export function ZonasPanel({
             {(
               [
                 ["zonas", "Zonas", zonas.length],
+                ["propuestas", "Propuestas", propuestas?.filter((p) => p.revision === "pendiente").length ?? 0],
                 ["pendientes", "Sin resolver", pendientes?.length ?? 0],
               ] as const
             ).map(([t, label, n]) => (
@@ -239,6 +258,8 @@ export function ZonasPanel({
           </div>
           {tab === "pendientes" ? (
             <Pendientes items={pendientes} onPick={onFailure} />
+          ) : tab === "propuestas" ? (
+            <Propuestas items={propuestas} onPick={onPropuesta} />
           ) : (
           <>
           <div className="px-4 pt-3">
@@ -413,6 +434,76 @@ function ZoneCard({
         >
           ✏️ Editar zona
         </button>
+      )}
+    </div>
+  );
+}
+
+function Propuestas({ items, onPick }: { items: Propuesta[] | null; onPick: (p: Propuesta) => void }) {
+  const [ver, setVer] = useState<Propuesta["revision"]>("pendiente");
+  if (!items) return <p className="px-4 py-3 text-sm text-neutral-500">Cargando…</p>;
+  const n = (r: Propuesta["revision"]) => items.filter((p) => p.revision === r).length;
+  const shown = items.filter((p) => p.revision === ver);
+  return (
+    <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-4 pt-2">
+      <p className="px-2 pb-2 text-[11px] leading-4 text-neutral-400">
+        Zonas sugeridas a partir de cómo los brokers nombran los lugares (WhatsApp, propiedades, perfiles y
+        requerimientos). No cambian nada hasta que alguien las aprueba. Toca una para revisarla.
+      </p>
+      <div className="flex gap-1 px-2 pb-2 text-xs">
+        {(
+          [
+            ["pendiente", "Por revisar"],
+            ["aprobada", "Aprobadas"],
+            ["descartada", "Descartadas"],
+          ] as const
+        ).map(([r, label]) => (
+          <button
+            key={r}
+            type="button"
+            onClick={() => setVer(r)}
+            className={`rounded-full px-2.5 py-0.5 font-medium ${
+              ver === r ? "bg-violet-100 text-violet-800" : "text-neutral-500 hover:bg-neutral-100"
+            }`}
+          >
+            {label} <span className="tabular-nums opacity-70">{n(r)}</span>
+          </button>
+        ))}
+      </div>
+      {shown.length ? (
+        <ul>
+          {shown.map((p) => (
+            <li key={p.id}>
+              <button
+                type="button"
+                onClick={() => onPick(p)}
+                className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm hover:bg-neutral-50"
+              >
+                <span
+                  className={`inline-block h-3 w-3 shrink-0 rounded-sm border-2 ${
+                    p.tipo === "dibujar" ? "border-dashed border-violet-500" : "border-violet-600 bg-violet-200"
+                  }`}
+                />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate font-medium text-neutral-800">{p.nombre}</span>
+                  <span className="block truncate text-[11px] text-neutral-400">
+                    {TIPO_PROPUESTA[p.tipo]}
+                    {p.n_miembros ? ` · ${p.n_miembros} colonia${p.n_miembros === 1 ? "" : "s"}` : ""}
+                    {p.existe && !p.existe.igual ? " · ajusta una zona existente" : ""}
+                  </span>
+                </span>
+                <span
+                  title="Veces que aparece el nombre (WhatsApp, propiedades, perfiles, requerimientos)"
+                  className="rounded-md bg-violet-50 px-1.5 py-0.5 text-xs font-semibold tabular-nums text-violet-700"
+                >
+                  {p.total}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="px-2 py-4 text-center text-xs text-neutral-400">Nada aquí.</p>
       )}
     </div>
   );
