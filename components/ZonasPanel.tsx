@@ -3,6 +3,8 @@
 import { useMemo, useState } from "react";
 import type { MapZona, PorUbicar, PorUbicarMotivo, Propuesta, PropuestaTipo, ZonaKind } from "@/lib/mapaZonas";
 import type { Failure } from "@/lib/zonas";
+import type { Verificacion } from "@/lib/mapaZonas";
+import { VerificacionBox, VeredictoBadge } from "@/components/VerificacionBox";
 
 // The side panel of the big map: which zones exist in this estado, how they
 // nest, which ones collide, and how much of what's on the map sits inside
@@ -90,6 +92,9 @@ export function ZonasPanel({
   onPropuesta,
   porUbicar,
   onFocusPoint,
+  verifs,
+  onReplace,
+  pending,
 }: {
   estado: string;
   zonas: MapZona[] | null;
@@ -122,6 +127,11 @@ export function ZonasPanel({
   onPropuesta: (p: Propuesta) => void;
   porUbicar: PorUbicar[] | null;
   onFocusPoint: (lat: number, lng: number) => void;
+  /** zone-by-zone verdicts by zid ('p<id>' | 'z:<key>') */
+  verifs: Map<string, Verificacion>;
+  /** re-point a Google box's requerimientos per its verdict */
+  onReplace: (oldKey: string, newKey: string, verifId: number) => void;
+  pending: boolean;
 }) {
   const [q, setQ] = useState("");
   const setTab = onTab;
@@ -253,6 +263,9 @@ export function ZonasPanel({
           zonas={zonas ?? []}
           onSelect={onSelect}
           onEdit={onEdit}
+          verif={verifs.get(`z:${sel.key}`) ?? null}
+          onReplace={onReplace}
+          pending={pending}
         />
       ) : null}
 
@@ -284,7 +297,7 @@ export function ZonasPanel({
           {tab === "pendientes" ? (
             <Pendientes items={pendientes} onPick={onFailure} />
           ) : tab === "propuestas" ? (
-            <Propuestas items={propuestas} onPick={onPropuesta} />
+            <Propuestas items={propuestas} onPick={onPropuesta} verifs={verifs} />
           ) : tab === "ubicar" ? (
             <PorUbicarList items={porUbicar} onFocus={onFocusPoint} />
           ) : (
@@ -345,6 +358,9 @@ export function ZonasPanel({
                                     {z.municipio}
                                   </span>
                                 </span>
+                                {verifs.get(`z:${z.key}`) && verifs.get(`z:${z.key}`)!.veredicto !== "confirmar" ? (
+                                  <VeredictoBadge v={verifs.get(`z:${z.key}`)!} />
+                                ) : null}
                                 {z.requerimientos ? (
                                   <span
                                     title={`${z.requerimientos} requerimiento${z.requerimientos === 1 ? "" : "s"} abierto${z.requerimientos === 1 ? "" : "s"} la usa${z.requerimientos === 1 ? "" : "n"}`}
@@ -398,6 +414,9 @@ function ZoneCard({
   zonas,
   onSelect,
   onEdit,
+  verif,
+  onReplace,
+  pending,
 }: {
   z: MapZona;
   byKey: Map<string, MapZona>;
@@ -406,6 +425,9 @@ function ZoneCard({
   zonas: MapZona[];
   onSelect: (key: string | null) => void;
   onEdit: (key: string) => void;
+  verif: Verificacion | null;
+  onReplace: (oldKey: string, newKey: string, verifId: number) => void;
+  pending: boolean;
 }) {
   const padre = z.padre ? byKey.get(z.padre) : null;
   const hijos = zonas.filter((o) => o.padre === z.key);
@@ -464,6 +486,20 @@ function ZoneCard({
           </li>
         ) : null}
       </ul>
+      {verif ? (
+        <div className="mt-3">
+          <VerificacionBox
+            v={verif}
+            pending={pending}
+            onReplace={
+              verif.veredicto === "reemplazar" && verif.reemplazar_por && z.requerimientos && !verif.aplicada
+                ? () => onReplace(z.key, verif.reemplazar_por!, verif.id)
+                : undefined
+            }
+            replaceLabel={`Mover ${z.requerimientos} requerimiento${z.requerimientos === 1 ? "" : "s"} a la sugerida`}
+          />
+        </div>
+      ) : null}
       {z.kind === "google" ? (
         <p className="mt-3 text-[11px] leading-4 text-neutral-400">
           Las zonas de Google se revisan en la fase 3 (promover, fusionar o borrar).
@@ -481,7 +517,15 @@ function ZoneCard({
   );
 }
 
-function Propuestas({ items, onPick }: { items: Propuesta[] | null; onPick: (p: Propuesta) => void }) {
+function Propuestas({
+  items,
+  onPick,
+  verifs,
+}: {
+  items: Propuesta[] | null;
+  onPick: (p: Propuesta) => void;
+  verifs: Map<string, Verificacion>;
+}) {
   const [ver, setVer] = useState<Propuesta["revision"]>("pendiente");
   if (!items) return <p className="px-4 py-3 text-sm text-neutral-500">Cargando…</p>;
   const n = (r: Propuesta["revision"]) => items.filter((p) => p.revision === r).length;
@@ -534,6 +578,7 @@ function Propuestas({ items, onPick }: { items: Propuesta[] | null; onPick: (p: 
                     {p.existe && !p.existe.igual ? " · ajusta una zona existente" : ""}
                   </span>
                 </span>
+                {verifs.get(`p${p.id}`) ? <VeredictoBadge v={verifs.get(`p${p.id}`)!} /> : null}
                 <span
                   title="Veces que aparece el nombre (WhatsApp, propiedades, perfiles, requerimientos)"
                   className="rounded-md bg-violet-50 px-1.5 py-0.5 text-xs font-semibold tabular-nums text-violet-700"

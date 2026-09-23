@@ -115,3 +115,42 @@ export async function fetchPorUbicar(estado: string): Promise<PorUbicar[]> {
   if (error) throw new Error(error.message);
   return (data ?? []) as PorUbicar[];
 }
+
+// Verificación zona por zona (2026-09-23): a verdict per zone from our data +
+// web research. zid = 'p<id>' (proposal) | 'z:<key>' (live zone). Suggestions
+// only — applied by a human through the editor.
+export type Veredicto = "confirmar" | "ajustar" | "dibujar" | "reemplazar" | "descartar" | "fusionar";
+
+export type Verificacion = {
+  id: number;
+  zid: string;
+  nombre: string;
+  veredicto: Veredicto;
+  sumar: { key: string; nombre: string; razon?: string }[];
+  quitar: { key: string; nombre: string; razon?: string }[];
+  reemplazar_por: string | null;
+  fusionar_con: string | null;
+  dibujo: { descripcion?: string; referencias?: string[] } | null;
+  nombre_sugerido: string | null;
+  municipio: string | null;
+  confianza: "alta" | "media" | "baja" | null;
+  resumen: string | null;
+  fuentes: string[];
+  datos: { pins?: number; dentro?: number; fit?: number | null; menciones?: number };
+  fuente: "datos" | "web";
+  aplicada: boolean;
+};
+
+export async function fetchVerificaciones(estado: string): Promise<Verificacion[]> {
+  const sb = supabaseAdmin();
+  const { data, error } = await sb.rpc("admin_zona_verificaciones", { p_estado: estado });
+  if (error) throw new Error(error.message);
+  return (data ?? []) as Verificacion[];
+}
+
+export async function fetchColoniasPorKeys(keys: string[]): Promise<MapColonia[]> {
+  const sb = supabaseAdmin();
+  const { data, error } = await sb.rpc("admin_colonias_por_keys", { p_keys: keys });
+  if (error) throw new Error(error.message);
+  return (data ?? []) as MapColonia[];
+}

@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import type { Failure } from "@/lib/zonas";
-import type { Propuesta, ZonaKind } from "@/lib/mapaZonas";
+import type { Propuesta, Verificacion, ZonaKind } from "@/lib/mapaZonas";
+import { VerificacionBox } from "@/components/VerificacionBox";
 import type { Evidence, MemberGeo, Ring } from "@/components/useZonaEditor";
 import { zonaLabel, KIND_LABEL, TIPO_PROPUESTA } from "@/components/ZonasPanel";
 
@@ -28,6 +29,8 @@ export type EditState = {
   props: number;
   /** set when reviewing a draft from the «Propuestas» tab */
   propuesta: Propuesta | null;
+  /** the verdict whose suggestion was loaded («Aplicar sugerencia»), marked applied on save */
+  verifId: number | null;
 };
 
 export function ZonaEditor({
@@ -47,6 +50,8 @@ export function ZonaEditor({
   onDelete,
   onIgnore,
   onDiscardPropuesta,
+  verif,
+  onApplyVerif,
 }: {
   edit: EditState;
   /** listings of the estado the zone would hold as edited */
@@ -65,6 +70,9 @@ export function ZonaEditor({
   onDelete: () => void;
   onIgnore: () => void;
   onDiscardPropuesta: () => void;
+  /** zone-by-zone verdict for this zone / proposal, if any */
+  verif: Verificacion | null;
+  onApplyVerif: () => void;
 }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const isNew = edit.key === null;
@@ -183,6 +191,20 @@ export function ZonaEditor({
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+        {verif ? (
+          <div className="mb-3">
+            <VerificacionBox
+              v={edit.verifId === verif.id ? { ...verif, aplicada: true } : verif}
+              onApply={edit.modo === "miembros" ? onApplyVerif : undefined}
+              pending={pending || loading}
+            />
+            {edit.verifId === verif.id ? (
+              <p className="mt-1 text-[11px] text-amber-800">
+                Sugerencia cargada en la lista de abajo — revísala y guarda para aplicarla.
+              </p>
+            ) : null}
+          </div>
+        ) : null}
         {loading ? (
           <p className="text-sm text-neutral-500">Cargando…</p>
         ) : edit.modo === "miembros" ? (

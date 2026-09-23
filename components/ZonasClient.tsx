@@ -2,14 +2,14 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { importLibrary, setOptions } from "@googlemaps/js-api-loader";
 import { MarkerClusterer, type Cluster } from "@googlemaps/markerclusterer";
-import type { Geo, MapColonia, MapZona, PorUbicar, Propuesta, ZonaKind } from "@/lib/mapaZonas";
+import type { Geo, MapColonia, MapZona, PorUbicar, Propuesta, Verificacion, ZonaKind } from "@/lib/mapaZonas";
 import { contains, shapeOf, type ZoneShape } from "@/lib/geoContains";
 import { PillSelect, PillTray, Toolbar } from "@/components/Pills";
 import { ZonasPanel, zonaLabel, KIND_LABEL, type PanelTab, type ZoneCounts } from "@/components/ZonasPanel";
 import { ZonaEditor, type EditState } from "@/components/ZonaEditor";
 import { useZonaEditor, type Evidence, type Ring } from "@/components/useZonaEditor";
 import { borrarZona, crearZona, crearZonaDibujada, guardarZona, ignorarNombre } from "@/app/actions";
-import { marcarPropuesta } from "@/app/zonas/actions";
+import { marcarPropuesta, marcarVerificacion, reemplazarZonaEnRequerimientos } from "@/app/zonas/actions";
 import type { CandidateSet, Failure, ZonaDetail } from "@/lib/zonas";
 
 // «Zonas» (Franz 2026-09-23): its own page, deliberately apart from «Mapa» —
@@ -152,6 +152,7 @@ export function ZonasClient({
   const [pendientes, setPendientes] = useState<Failure[] | null>(null);
   const [propuestas, setPropuestas] = useState<Propuesta[] | null>(null);
   const [porUbicar, setPorUbicar] = useState<PorUbicar[] | null>(null);
+  const [verifList, setVerifList] = useState<Verificacion[]>([]);
   const [tab, setTab] = useState<PanelTab>("zonas");
   // every colonia geometry seen (viewport, members, candidates) — a pick
   // must be drawable after the viewport that showed it has moved on
@@ -180,6 +181,7 @@ export function ZonasClient({
     setPendientes(null);
     setPropuestas(null);
     setPorUbicar(null);
+    setVerifList([]);
     setFlash(null);
   };
   useEffect(() => {
@@ -236,6 +238,19 @@ export function ZonasClient({
     return () => ac.abort();
   }, [estado, reloadTick]);
 
+  useEffect(() => {
+    if (!estado) return;
+    const ac = new AbortController();
+    fetch(`/api/zonas/verificaciones?estado=${encodeURIComponent(estado)}&t=${reloadTick}`, { signal: ac.signal })
+      .then((r) => (r.ok ? r.json() : []))
+      .then((rows: Verificacion[]) => setVerifList(rows))
+      .catch(() => {
+        if (!ac.signal.aborted) setVerifList([]);
+      });
+    return () => ac.abort();
+  }, [estado, reloadTick]);
+  const verifs = useMemo(() => new Map(verifList.map((v) => [v.zid, v])), [verifList]);
+
   const shapes = useMemo(() => new Map((zonas ?? []).map((z) => [z.key, shapeOf(z.geom)])), [zonas]);
   const byKey = useMemo(() => new Map((zonas ?? []).map((z) => [z.key, z])), [zonas]);
   const estadoListings = useMemo(() => listings.filter((l) => l.state === estado), [listings, estado]);
@@ -291,7 +306,7 @@ export function ZonasClient({
 
   const blankEdit = (over: Partial<EditState>): EditState => ({
     key: null, kind: null, nombre: "", modo: "miembros", picked: [], geoms: {}, ring: null,
-    drawing: false, seed: null, failure: null, props: 0, propuesta: null, ...over,
+    drawing: false, seed: null, failure: null, props: 0, propuesta: null, verifId: null, ...over,
   });
   const cache = (rows: { key: string; nombre: string; municipio: string; geom: Geo }[]) => {
     for (const r of rows) geomCache.current.set(r.key, { nombre: r.nombre, municipio: r.municipio, geom: r.geom });
@@ -464,6 +479,53 @@ export function ZonasClient({
     startPropRef.current = startPropuesta;
   });
 
+  // The verdict of whatever is open in the editor (proposal or live zone).
+  const editVerif = edit
+    ? (edit.propuesta ? verifs.get(`p${edit.propuesta.id}`) : edit.key ? verifs.get(`z:${edit.key}`) : undefined) ?? null
+    : null;
+
+  // «Aplicar sugerencia»: load the verdict's sumar/quitar into the pick list.
+  // Nothing is saved — the person reviews the list on the map and saves.
+  async function applyVerif() {
+    const v = editVerif;
+    if (!v || !edit || edit.modo !== "miembros") return;
+    const missing = v.sumar.map((c) => c.key).filter((k) => !geomCache.current.has(k));
+    if (missing.length) {
+      const r = await fetch(`/api/zonas/colonias-por-key?keys=${missing.join(",")}`);
+      if (r.ok) cache((await r.json()) as MapColonia[]);
+    }
+    const quitar = new Set(v.quitar.map((c) => c.key));
+    setEdit((e) => {
+      if (!e || e.modo !== "miembros") return e;
+      const geoms = { ...e.geoms };
+      const picked = e.picked.filter((k) => !quitar.has(k));
+      for (const k of quitar) delete geoms[k];
+      for (const c of v.sumar) {
+        const g = geomCache.current.get(c.key);
+        if (g && !picked.includes(c.key)) {
+          picked.push(c.key);
+          geoms[c.key] = g;
+        }
+      }
+      return { ...e, picked, geoms, verifId: v.id };
+    });
+  }
+
+  // Google boxes: move their open requerimientos to what the verdict says they
+  // meant (backed up per requerimiento, reversible from SQL).
+  function replaceInRequests(oldKey: string, newKey: string, verifId: number) {
+    startTransition(async () => {
+      const res = await reemplazarZonaEnRequerimientos(oldKey, newKey);
+      if (res.error) {
+        setFlash(`No se pudo mover: ${res.error}`);
+        return;
+      }
+      await marcarVerificacion(verifId, true);
+      setFlash(`${res.movidos} requerimiento${res.movidos === 1 ? "" : "s"} movido${res.movidos === 1 ? "" : "s"} a la zona sugerida.`);
+      setReloadTick((t) => t + 1);
+    });
+  }
+
   function discardPropuesta() {
     const p = edit?.propuesta;
     if (!p) return;
@@ -517,6 +579,7 @@ export function ZonasClient({
         return;
       }
       const key = e.key ?? res.key ?? null;
+      if (e.verifId) await marcarVerificacion(e.verifId, true);
       if (e.propuesta) {
         const m = await marcarPropuesta(e.propuesta.id, "aprobada", key);
         if (m.error) {
@@ -998,6 +1061,9 @@ export function ZonasClient({
             onPropuesta={startPropuesta}
             porUbicar={porUbicar}
             onFocusPoint={focusPoint}
+            verifs={verifs}
+            onReplace={replaceInRequests}
+            pending={pending}
             editor={
               edit ? (
                 <ZonaEditor
@@ -1020,6 +1086,8 @@ export function ZonasClient({
                   onDelete={deleteEdit}
                   onIgnore={ignoreFailure}
                   onDiscardPropuesta={discardPropuesta}
+                  verif={editVerif}
+                  onApplyVerif={applyVerif}
                 />
               ) : null
             }
