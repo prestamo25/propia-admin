@@ -1,5 +1,6 @@
 "use server";
 
+import { randomInt } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getRole } from "@/lib/session";
@@ -255,6 +256,108 @@ export async function removeRescuePair(phone10: string): Promise<Result> {
   }
 }
 
+
+// ---------------------------------------------------------------------------
+// Alta manual con PIN temporal 123456 (restaurado 2026-09-24 para el Foro:
+// el WhatsApp de códigos quedó sin cupo con Meta). La app obliga a cambiar el
+// PIN en el primer login (must_change_pin) — no se envía ningún código.
+// ---------------------------------------------------------------------------
+
+type AltaResult = { pin?: string; error?: string };
+
+// "temp" issues the shared default 123456 with users.must_change_pin=true —
+// the app forces the broker to replace it on their FIRST login (create-pin
+// hides "más tarde"), so the shared code dies the moment they enter.
+export type PinMode = "temp" | "chosen" | "random";
+
+const TEMP_PIN = "123456";
+
+// Same weak-PIN rules as the app (src/lib/auth.ts): repeated digit or a
+// straight ascending/descending run.
+function isWeakPin(pin: string): boolean {
+  if (/^(\d)\1+$/.test(pin)) return true;
+  return "0123456789".includes(pin) || "9876543210".includes(pin);
+}
+
+function generatePin(): string {
+  let pin: string;
+  do {
+    pin = String(randomInt(0, 1_000_000)).padStart(6, "0");
+  } while (isWeakPin(pin));
+  return pin;
+}
+
+export async function createBroker(
+  firstName: string,
+  lastName: string,
+  phone10: string,
+  mode: PinMode = "temp",
+  chosenPin?: string,
+): Promise<AltaResult> {
+  // Names are optional: an empty name routes the broker through onboarding
+  // after the (forced) PIN step, so they type their own.
+  const first = firstName.trim();
+  const last = lastName.trim();
+  const digits = phone10.replace(/\D/g, "");
+  if (digits.length !== 10)
+    return { error: "El teléfono debe tener 10 dígitos." };
+  if (mode === "chosen") {
+    if (!chosenPin || !/^\d{6}$/.test(chosenPin))
+      return { error: "El PIN debe tener exactamente 6 dígitos." };
+    if (isWeakPin(chosenPin))
+      return {
+        error:
+          "Ese PIN es demasiado fácil de adivinar (dígitos repetidos o en orden). Elige otro.",
+      };
+  }
+
+  const phone = `52${digits}`; // users.phone format: 52 + 10 digits, no "+"
+  const sb = supabaseAdmin();
+
+  const { data: existing } = await sb
+    .from("users")
+    .select("id, name")
+    .eq("phone", phone)
+    .maybeSingle();
+  if (existing)
+    return {
+      error: `Este número ya está registrado${existing.name ? ` (${existing.name})` : ""}. Puede entrar con su PIN o recuperarlo por SMS.`,
+    };
+
+  const pin =
+    mode === "temp" ? TEMP_PIN : mode === "chosen" ? chosenPin! : generatePin();
+  const { data: created, error: authErr } = await sb.auth.admin.createUser({
+    phone,
+    phone_confirm: true,
+    password: pin,
+  });
+  if (authErr) {
+    const msg = /already|exists|registered/i.test(authErr.message)
+      ? "Este número ya tiene una cuenta. Puede entrar con su PIN o recuperarlo por SMS."
+      : authErr.message;
+    return { error: msg };
+  }
+
+  const { error: profileErr } = await sb.from("users").insert({
+    id: created.user.id,
+    phone,
+    first_name: first,
+    last_name: last,
+    name: [first, last].filter(Boolean).join(" "),
+    states: [],
+    pin_set: true,
+    must_change_pin: mode === "temp",
+  });
+  if (profileErr) {
+    // Don't leave a half-created account: without the profile row the app
+    // would route this phone to SMS OTP, which is exactly what we're avoiding.
+    await sb.auth.admin.deleteUser(created.user.id);
+    return { error: `No se pudo crear el perfil: ${profileErr.message}` };
+  }
+
+  revalidatePath("/");
+  return { pin };
+}
 // ---------------------------------------------------------------------------
 // Zonas — Propia's editorial layer over the INEGI catalog.
 // ---------------------------------------------------------------------------

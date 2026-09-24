@@ -1,5 +1,6 @@
 import { TopNav } from "@/components/TopNav";
 import { LiveBoard } from "@/components/LiveBoard";
+import { AltaManualForm } from "@/components/AltaManualForm";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +19,10 @@ export default function EnVivoPage() {
           <p className="mt-1 text-sm text-neutral-500">
             Registros en tiempo real — se actualiza solo cada 5 segundos.
           </p>
+        </div>
+
+        <div className="mb-8">
+          <AltaManualForm />
         </div>
 
         <LiveBoard />
