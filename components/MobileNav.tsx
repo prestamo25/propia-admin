@@ -22,7 +22,8 @@ type NavKey =
   | "zonas"
   | "mapa"
   | "ubicaciones"
-  | "avisos";
+  | "avisos"
+  | "rifas";
 
 type Item = {
   href: string;
@@ -142,6 +143,19 @@ export function MobileNav({
         <svg {...STROKE}>
           <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
           <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+        </svg>
+      ),
+    },
+    {
+      href: "/rifas",
+      label: "Rifas",
+      key: "rifas",
+      icon: (
+        <svg {...STROKE}>
+          <path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z" />
+          <path d="M13 5v2" />
+          <path d="M13 17v2" />
+          <path d="M13 11v2" />
         </svg>
       ),
     },

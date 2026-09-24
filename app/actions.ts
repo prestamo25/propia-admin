@@ -661,3 +661,92 @@ export async function sendBroadcast(input: {
   revalidatePath("/avisos");
   return { sent: ok };
 }
+
+// Rifas (Franz 2026-09-24, para el Foro de Puebla): saca un ganador al azar
+// entre los asistentes de un evento. Pablo NO quiere que se vea cuánta gente
+// fue, así que la bolsa nunca sale del servidor: el navegador sólo recibe al
+// ganador (nombre + celular) y manda de vuelta los ids que ya ganaron para no
+// repetirlos. Ni la lista ni el conteo viajan al cliente.
+export type RifaPool = "attended" | "registered";
+export type RifaWinner = {
+  attendeeId: string;
+  name: string;
+  phone: string;
+  company: string | null;
+};
+
+export async function drawRaffleWinner(input: {
+  eventId: string;
+  pool: RifaPool;
+  exclude: string[];
+}): Promise<Result & { winner?: RifaWinner }> {
+  const role = await getRole();
+  if (!role || !roleCan(role, "admin")) return { error: "Sin permiso." };
+  if (!input.eventId) return { error: "Elige un evento." };
+
+  const statuses = input.pool === "registered" ? ["attended", "confirmed"] : ["attended"];
+  const sb = supabaseAdmin();
+  const ids: string[] = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await sb
+      .from("event_attendees")
+      .select("id")
+      .eq("event_id", input.eventId)
+      .in("status", statuses)
+      .order("id")
+      .range(from, from + 999);
+    if (error) return { error: error.message };
+    for (const r of data ?? []) ids.push(r.id);
+    if (!data || data.length < 1000) break;
+  }
+
+  // El organizador y el staff también están inscritos (Pablo, Mariana…) y
+  // no deben poder ganar su propia rifa.
+  const [{ data: ev }, { data: staff }] = await Promise.all([
+    sb.from("events").select("created_by").eq("id", input.eventId).maybeSingle(),
+    sb.from("event_staff").select("user_id").eq("event_id", input.eventId),
+  ]);
+  const hosts = [ev?.created_by, ...(staff ?? []).map((s) => s.user_id)].filter(Boolean) as string[];
+  const hostIds = new Set<string>();
+  if (hosts.length) {
+    const { data: hostRows, error: hostErr } = await sb
+      .from("event_attendees")
+      .select("id")
+      .eq("event_id", input.eventId)
+      .in("user_id", hosts);
+    if (hostErr) return { error: hostErr.message };
+    for (const r of hostRows ?? []) hostIds.add(r.id);
+  }
+
+  const taken = new Set(input.exclude ?? []);
+  const bag = ids.filter((id) => !taken.has(id) && !hostIds.has(id));
+  if (bag.length === 0) {
+    return {
+      error:
+        taken.size > 0
+          ? "Ya salieron todos los participantes."
+          : input.pool === "attended"
+            ? "Todavía nadie tiene la entrada registrada en este evento."
+            : "Este evento no tiene inscritos.",
+    };
+  }
+
+  const pick = bag[randomInt(bag.length)];
+  const { data: row, error } = await sb
+    .from("event_attendees")
+    .select("id, user:users!event_attendees_user_id_fkey(name, phone, company)")
+    .eq("id", pick)
+    .single();
+  if (error) return { error: error.message };
+  const u = (Array.isArray(row.user) ? row.user[0] : row.user) as
+    | { name: string | null; phone: string | null; company: string | null }
+    | null;
+  return {
+    winner: {
+      attendeeId: pick,
+      name: u?.name?.trim() || "Sin nombre",
+      phone: u?.phone ?? "",
+      company: u?.company?.trim() || null,
+    },
+  };
+}
