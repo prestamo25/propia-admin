@@ -667,6 +667,23 @@ export async function sendBroadcast(input: {
 // fue, así que la bolsa nunca sale del servidor: el navegador sólo recibe al
 // ganador (nombre + celular) y manda de vuelta los ids que ya ganaron para no
 // repetirlos. Ni la lista ni el conteo viajan al cliente.
+// El equipo de Propia nunca entra a una rifa, sea o no staff del evento
+// (Franz 2026-09-24): Franz («Propia Broker»), Pablo, las dos cuentas de
+// Mariana y las cuentas PROPIA STAFF / de prueba.
+const RAFFLE_EXCLUDED_USERS = [
+  "15fef8d4-0384-4d50-89c5-059c93e9003d", // Propia Broker (Franz)
+  "fb561d43-ae89-4d96-b045-046edaad2eb3", // Pablo Prestamo
+  "71788077-d110-409a-b730-8825cffb603a", // Mariana Figueroa
+  "4d4415af-5003-4ff5-ac45-96b5d2422c73", // Mariana Figueroa (2ª cuenta)
+  "6334f20b-4414-45ed-b051-268d4acbf85b", // Staff Propia 01
+  "2af0bc92-a4ec-4841-a3fa-753fd8b1d0f2", // STAFF 2 PROPIA
+  "d8532244-1eba-4a4a-9fc0-e60fcfa65dc2", // PROPIA STAFF 03
+  "13258141-17d5-4e52-bf31-4037a894ad54", // PROPIA STAFF 04
+  "062964a1-7d32-490f-a259-857179378ff0", // PROPIA STAFF 5
+  "8a17d9fa-967b-4bf4-96c6-047242a3569b", // PROPIA STAFF 06
+  "9880d781-7270-419a-a024-7acfe64e1122", // Broker Test
+];
+
 export type RifaPool = "attended" | "registered";
 export type RifaWinner = {
   attendeeId: string;
@@ -700,13 +717,17 @@ export async function drawRaffleWinner(input: {
     if (!data || data.length < 1000) break;
   }
 
-  // El organizador y el staff también están inscritos (Pablo, Mariana…) y
-  // no deben poder ganar su propia rifa.
+  // El organizador, el staff del evento y el equipo de Propia también están
+  // inscritos y no deben poder ganar.
   const [{ data: ev }, { data: staff }] = await Promise.all([
     sb.from("events").select("created_by").eq("id", input.eventId).maybeSingle(),
     sb.from("event_staff").select("user_id").eq("event_id", input.eventId),
   ]);
-  const hosts = [ev?.created_by, ...(staff ?? []).map((s) => s.user_id)].filter(Boolean) as string[];
+  const hosts = [
+    ev?.created_by,
+    ...(staff ?? []).map((s) => s.user_id),
+    ...RAFFLE_EXCLUDED_USERS,
+  ].filter(Boolean) as string[];
   const hostIds = new Set<string>();
   if (hosts.length) {
     const { data: hostRows, error: hostErr } = await sb
