@@ -3,67 +3,14 @@ import { countOpenReports } from "@/lib/reports";
 import { countPendingUsers } from "@/lib/aprobaciones";
 import { getRole } from "@/lib/session";
 import { MobileNav } from "@/components/MobileNav";
+import { countFor, navFor, type NavCounts, type NavKey, type NavLink } from "@/lib/nav";
 
-type NavKey =
-  | "inicio"
-  | "brokers"
-  | "aprobaciones"
-  | "eventos"
-  | "alta"
-  | "envivo"
-  | "panorama"
-  | "reportes"
-  | "salidas"
-  | "whatsapp"
-  | "almacenamiento"
-  | "lifecycle"
-  | "zonas"
-  | "mapa"
-  | "ubicaciones"
-  | "avisos"
-  | "rifas";
-
-// The tab row folds from the right into a «Más» menu as the window narrows
-// (Franz 2026-09-03: his everyday window is ~960px wide and the row
-// overflowed — "SalidasSalirZonas" piled up and the brand read "Pro").
-// Tiers are the `nav*` breakpoints in globals.css, set from the measured
-// width of the real row (brand 154 + row 912 + Salir 52 + gaps ≈ 1,154px):
-//   navlg ≥ 1240px  everything is a tab; brand word, «Técnico ▾», «Salir» text
-//   navmd ≥ 1000px  Salidas · Zonas · Técnico fold into «Más»; Salir → icon;
-//                    the brand word goes (logo + role badge stay)
-//   navsm ≥  890px  Panorama folds too
-//   md     ≥  768px  Reportes folds too (its badge moves onto «Más»); no badge
-// Pure CSS: every foldable item renders twice (tab + menu row) and the
-// breakpoint variants pick which copy shows — no measuring, no hydration
-// flash, and TopNav stays a server component. Below md = MobileNav drawer.
-type Tier = "sm" | "md" | "lg";
-
-// Static class strings (Tailwind's scanner needs them literal).
-const TAB_AT: Record<Tier, string> = {
-  sm: "hidden navsm:inline-flex",
-  md: "hidden navmd:inline-flex",
-  lg: "hidden navlg:inline-flex",
-};
-const MENU_BELOW: Record<Tier, string> = {
-  sm: "navsm:hidden",
-  md: "navmd:hidden",
-  lg: "navlg:hidden",
-};
-const ACTIVE = "bg-white text-brand shadow-sm ring-1 ring-black/[0.04]";
-// «Más» looks active only while the active page is folded inside it.
-const ACTIVE_BELOW: Record<Tier, string> = {
-  sm: "max-navsm:bg-white max-navsm:text-brand max-navsm:shadow-sm max-navsm:ring-1 max-navsm:ring-black/[0.04]",
-  md: "max-navmd:bg-white max-navmd:text-brand max-navmd:shadow-sm max-navmd:ring-1 max-navmd:ring-black/[0.04]",
-  lg: ACTIVE, // the «Más» trigger itself only exists below navlg
-};
-
-type Item = {
-  href: string;
-  label: string;
-  key: NavKey;
-  tier?: Tier; // a tab from this breakpoint up; folded into «Más» below it
-  badge?: number;
-};
+// Grouped nav (2026-09-28): Inicio · Miembros · Aprobaciones · Reportes ·
+// Eventos ▾ · Avisos · Datos ▾ · Técnico ▾ — the entries live in lib/nav.ts.
+// The old fold-into-«Más» tiers are gone: below navmd (1000px) the tabs just
+// tighten (px-2, no brand word / role badge / «Grupo · Página» hint, Salir →
+// icon) so all eight fit down to navsm (840px). A group's trigger carries the
+// sum of its badges. Below navsm = MobileNav drawer.
 
 // Build stamp baked in by deploy-admin.sh — shown at the foot of the
 // «Técnico» menu so what is live is never a guess (same values as
@@ -79,6 +26,9 @@ const BUILD_TIME = process.env.NEXT_PUBLIC_BUILD_TIME
     }).format(new Date(process.env.NEXT_PUBLIC_BUILD_TIME))
   : null;
 
+const ACTIVE = "bg-white text-brand shadow-sm ring-1 ring-black/[0.04]";
+const IDLE = "text-neutral-500 hover:text-neutral-800";
+
 const chevron = (
   <svg
     width="12"
@@ -90,6 +40,7 @@ const chevron = (
     strokeLinecap="round"
     strokeLinejoin="round"
     aria-hidden="true"
+    className="transition group-focus-within:rotate-180 group-hover:rotate-180"
   >
     <path d="m6 9 6 6 6-6" />
   </svg>
@@ -101,6 +52,7 @@ export async function TopNav({ active }: { active: NavKey }) {
     countPendingUsers(),
     getRole(),
   ]);
+  const counts: NavCounts = { openReports, pendingUsers };
   const isDev = role === "dev";
   const roleBadge =
     role === "dev"
@@ -109,55 +61,8 @@ export async function TopNav({ active }: { active: NavKey }) {
         ? { label: "Mariana", cls: "bg-sky-100 text-sky-700" }
         : { label: "Admin", cls: "bg-neutral-100 text-neutral-500" };
 
-  const main: Item[] = [
-    { href: "/", label: "Inicio", key: "inicio" },
-    { href: "/brokers", label: "Miembros", key: "brokers" },
-    {
-      href: "/aprobaciones",
-      label: "Aprobaciones",
-      key: "aprobaciones",
-      badge: pendingUsers,
-    },
-    { href: "/eventos", label: "Eventos", key: "eventos" },
-    { href: "/avisos", label: "Avisos", key: "avisos", tier: "md" },
-    { href: "/rifas", label: "Rifas", key: "rifas", tier: "lg" },
-    { href: "/en-vivo", label: "En vivo", key: "envivo" },
-    { href: "/panorama", label: "Panorama", key: "panorama", tier: "md" },
-    { href: "/mapa", label: "Mapa", key: "mapa", tier: "md" },
-    {
-      href: "/reportes",
-      label: "Reportes",
-      key: "reportes",
-      tier: "sm",
-      badge: openReports,
-    },
-    { href: "/salidas", label: "Salidas", key: "salidas", tier: "lg" },
-    { href: "/zonas", label: "Zonas", key: "zonas", tier: "lg" },
-  ];
-  // The three dev tools live behind ONE nav item (Franz 2026-08-20: the tab
-  // row got too wide): «Técnico ▾» at navlg, a section inside «Más» below.
-  const dev: Item[] = [
-    { href: "/whatsapp", label: "WhatsApp", key: "whatsapp", tier: "lg" },
-    {
-      href: "/almacenamiento",
-      label: "Almacenamiento",
-      key: "almacenamiento",
-      tier: "lg",
-    },
-    { href: "/lifecycle", label: "Ciclo de vida", key: "lifecycle", tier: "lg" },
-    { href: "/ubicaciones", label: "Ubicaciones", key: "ubicaciones", tier: "lg" },
-  ];
-  const folded = main.filter((i) => i.tier);
-  const activeMain = main.find((i) => i.key === active);
-  const devActive = dev.some((i) => i.key === active);
-  const moreActive = activeMain?.tier
-    ? ACTIVE_BELOW[activeMain.tier]
-    : devActive
-      ? ACTIVE
-      : "";
-
-  const badge = (n: number | undefined, extra = "") =>
-    n && n > 0 ? (
+  const badge = (n: number, extra = "") =>
+    n > 0 ? (
       <span
         className={`grid h-4 min-w-4 place-items-center rounded-full bg-rose-500 px-1 text-[10px] font-semibold tabular-nums text-white ${extra}`}
       >
@@ -165,72 +70,104 @@ export async function TopNav({ active }: { active: NavKey }) {
       </span>
     ) : null;
 
-  const tab = (i: Item) => (
+  const tab = (l: NavLink) => (
     <Link
-      key={i.key}
-      href={i.href}
-      className={`${i.tier ? TAB_AT[i.tier] : "inline-flex"} items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium transition ${
-        active === i.key ? ACTIVE : "text-neutral-500 hover:text-neutral-800"
+      key={l.key}
+      href={l.href}
+      className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg px-2 py-1.5 text-sm font-medium transition navmd:px-3 ${
+        active === l.key ? ACTIVE : IDLE
       }`}
     >
-      {i.label}
-      {badge(i.badge)}
+      {l.label}
+      {badge(countFor(l, counts))}
     </Link>
   );
 
-  // Menu row. `tiered` rows hide themselves once their tab is back in the
-  // row; the «Técnico ▾» dropdown's rows are untiered (that menu only
-  // exists at navlg, where every dev tool is folded by definition).
-  const menuItem = (i: Item, tiered: boolean) => (
+  const menuItem = (l: NavLink) => (
     <Link
-      key={i.key}
-      href={i.href}
-      className={`${tiered && i.tier ? MENU_BELOW[i.tier] : ""} flex items-center gap-2 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition ${
-        active === i.key
+      key={l.key}
+      href={l.href}
+      className={`flex items-center gap-2 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition ${
+        active === l.key
           ? "bg-neutral-100 text-neutral-900"
           : "text-neutral-600 hover:bg-neutral-50 hover:text-neutral-900"
       }`}
     >
-      {i.label}
-      {badge(i.badge, "ml-auto")}
+      {l.label}
+      {badge(countFor(l, counts), "ml-auto")}
     </Link>
   );
 
-  // CSS-only hover/focus dropdown (shared by «Más» and «Técnico»). The
-  // trigger is a real button so a click focuses it and the menu stays open
-  // until focus leaves — hover alone works too.
+  // CSS-only hover/focus dropdown. With `href` it's a split button: the name
+  // is a link to the group's main page (click-through, no extra click) and
+  // the ▾ is a real button — clicking it focuses it, so the menu stays open
+  // until focus leaves. Hover over either half opens the menu too.
   const dropdown = (
-    trigger: React.ReactNode,
-    triggerCls: string,
-    body: React.ReactNode,
-    align: "left" | "right",
-  ) => (
-    <div className="group relative">
-      <button
-        type="button"
-        aria-haspopup="menu"
-        className={`inline-flex cursor-default items-center gap-1 whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium transition ${triggerCls}`}
-      >
-        {trigger}
-        {chevron}
-      </button>
-      <div
-        className={`invisible absolute top-full z-30 pt-1.5 opacity-0 transition group-focus-within:visible group-focus-within:opacity-100 group-hover:visible group-hover:opacity-100 ${
-          align === "right" ? "right-0" : "left-0"
-        }`}
-      >
-        <div className="min-w-44 rounded-xl bg-white p-1 shadow-lg ring-1 ring-black/[0.06]">
-          {body}
+    id: string,
+    label: string,
+    items: NavLink[],
+    href?: string,
+    footer?: React.ReactNode,
+  ) => {
+    const current = items.find((l) => l.key === active);
+    const total = items.reduce((n, l) => n + countFor(l, counts), 0);
+    const tone = current ? "text-brand" : "text-neutral-500 group-hover:text-neutral-800";
+    const name = (
+      <>
+        {label}
+        {current && current.label !== label ? (
+          <span className="hidden font-normal text-neutral-400 navmd:inline">
+            · {current.label}
+          </span>
+        ) : null}
+        {badge(total)}
+      </>
+    );
+    return (
+      <div key={id} className="group relative">
+        <div
+          className={`inline-flex items-center whitespace-nowrap rounded-lg text-sm font-medium transition ${
+            current ? ACTIVE : ""
+          }`}
+        >
+          {href ? (
+            <>
+              <Link
+                href={href}
+                className={`inline-flex items-center gap-1.5 py-1.5 pl-2 pr-1 transition navmd:pl-3 ${tone}`}
+              >
+                {name}
+              </Link>
+              <button
+                type="button"
+                aria-haspopup="menu"
+                aria-label={`Más de ${label}`}
+                className={`grid cursor-default place-items-center self-stretch rounded-r-lg pl-0.5 pr-2 transition navmd:pr-2.5 ${tone}`}
+              >
+                {chevron}
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              aria-haspopup="menu"
+              className={`inline-flex cursor-default items-center gap-1.5 px-2 py-1.5 transition navmd:px-3 ${tone}`}
+            >
+              {name}
+              {chevron}
+            </button>
+          )}
+        </div>
+        <div className="invisible absolute left-0 top-full z-30 pt-1.5 opacity-0 transition group-focus-within:visible group-focus-within:opacity-100 group-hover:visible group-hover:opacity-100">
+          <div className="min-w-44 rounded-xl bg-white p-1 shadow-lg ring-1 ring-black/[0.06]">
+            {items.map(menuItem)}
+            {footer}
+          </div>
         </div>
       </div>
-    </div>
-  );
+    );
+  };
 
-  const devSectionLabel = (
-    <div className="px-3 pb-1 pt-1.5 text-[11px] font-semibold uppercase tracking-wide text-neutral-400">
-      Técnico
-    </div>
-  );
   const buildStamp = (
     <>
       <div className="mx-2 my-1 h-px bg-neutral-100" />
@@ -257,67 +194,35 @@ export async function TopNav({ active }: { active: NavKey }) {
                 alt="Propia"
                 className="h-8 w-8 rounded-xl shadow-sm ring-1 ring-black/[0.06]"
               />
-              <span className="text-[15px] font-semibold tracking-tight text-neutral-900 md:hidden navlg:inline">
+              <span className="text-[15px] font-semibold tracking-tight text-neutral-900 navsm:hidden navmd:inline">
                 Propia
               </span>
             </Link>
             <span
-              className={`rounded-md px-1.5 py-0.5 text-[11px] font-medium md:hidden navsm:inline ${roleBadge.cls}`}
+              className={`rounded-md px-1.5 py-0.5 text-[11px] font-medium hidden navmd:inline ${roleBadge.cls}`}
             >
               {roleBadge.label}
             </span>
           </div>
-          <nav className="hidden items-center gap-1 rounded-xl bg-neutral-200/40 p-1 md:flex">
-            {main.map(tab)}
-            {isDev ? (
-              <div className="hidden items-center navlg:flex">
-                <span className="mx-1 h-4 w-px bg-neutral-300/70" />
-                {dropdown(
-                  "Técnico",
-                  devActive
-                    ? ACTIVE
-                    : "text-neutral-500 group-hover:text-neutral-800",
-                  <>
-                    {dev.map((i) => menuItem(i, false))}
-                    {buildStamp}
-                  </>,
-                  "left",
-                )}
-              </div>
-            ) : null}
-            <div className="navlg:hidden">
-              {dropdown(
-                <>
-                  Más
-                  {folded.map((i) =>
-                    i.badge && i.badge > 0 ? (
-                      <span key={i.key} className={MENU_BELOW[i.tier!]}>
-                        {badge(i.badge)}
-                      </span>
-                    ) : null,
-                  )}
-                </>,
-                moreActive || "text-neutral-500 group-hover:text-neutral-800",
-                <>
-                  {folded.map((i) => menuItem(i, true))}
-                  {isDev ? (
-                    <>
-                      <div className="mx-2 my-1 h-px bg-neutral-100" />
-                      {devSectionLabel}
-                      {dev.map((i) => menuItem(i, true))}
-                      {buildStamp}
-                    </>
-                  ) : null}
-                </>,
-                "right",
-              )}
-            </div>
+          <nav className="hidden items-center gap-0.5 rounded-xl navmd:gap-1 bg-neutral-200/40 p-1 navsm:flex">
+            {navFor(isDev).map((e) =>
+              e.kind === "link" ? (
+                tab(e)
+              ) : e.devOnly ? (
+                <div key={e.id} className="flex items-center">
+                  <span className="mx-1 h-4 w-px bg-neutral-300/70" />
+                  {dropdown(e.id, e.label, e.items, e.href, buildStamp)}
+                </div>
+              ) : (
+                dropdown(e.id, e.label, e.items, e.href)
+              ),
+            )}
           </nav>
         </div>
-        <div className="hidden shrink-0 items-center md:flex">
+        <div className="hidden shrink-0 items-center navsm:flex">
           <a
             href="/api/logout"
-            className="hidden rounded-lg px-3 py-1.5 text-sm font-medium text-neutral-500 ring-1 ring-neutral-200 transition hover:bg-white hover:text-neutral-800 navlg:inline-block"
+            className="hidden rounded-lg px-3 py-1.5 text-sm font-medium text-neutral-500 ring-1 ring-neutral-200 transition hover:bg-white hover:text-neutral-800 navmd:inline-block"
           >
             Salir
           </a>
@@ -325,7 +230,7 @@ export async function TopNav({ active }: { active: NavKey }) {
             href="/api/logout"
             title="Salir"
             aria-label="Salir"
-            className="grid h-8 w-8 place-items-center rounded-lg text-neutral-500 ring-1 ring-neutral-200 transition hover:bg-white hover:text-neutral-800 navlg:hidden"
+            className="grid h-8 w-8 place-items-center rounded-lg text-neutral-500 ring-1 ring-neutral-200 transition hover:bg-white hover:text-neutral-800 navmd:hidden"
           >
             <svg
               width="16"

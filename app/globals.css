@@ -13,11 +13,11 @@
 }
 
 @theme {
-  /* Header tab-row folding tiers — see components/TopNav.tsx. rem like the
-     defaults (Tailwind sorts breakpoints, so units must match). */
-  --breakpoint-navsm: 55.625rem; /* 890px */
+  /* Header: brand word, «Salir» text and the «Grupo · Página» hint appear
+     from here up — see components/TopNav.tsx. rem like the defaults
+     (Tailwind sorts breakpoints, so units must match). */
+  --breakpoint-navsm: 52.5rem; /* 840px — below it the header is the drawer */
   --breakpoint-navmd: 62.5rem; /* 1000px */
-  --breakpoint-navlg: 77.5rem; /* 1240px */
 
   --color-brand: #1c4588;
   --color-brand-dark: #14315f;

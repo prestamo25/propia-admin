@@ -3,35 +3,9 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
+import { countFor, navFor, type NavKey, type NavLink } from "@/lib/nav";
 
 const emptySubscribe = () => () => {};
-
-type NavKey =
-  | "inicio"
-  | "brokers"
-  | "aprobaciones"
-  | "eventos"
-  | "alta"
-  | "envivo"
-  | "panorama"
-  | "reportes"
-  | "salidas"
-  | "whatsapp"
-  | "almacenamiento"
-  | "lifecycle"
-  | "zonas"
-  | "mapa"
-  | "ubicaciones"
-  | "avisos"
-  | "rifas";
-
-type Item = {
-  href: string;
-  label: string;
-  key: NavKey;
-  icon: React.ReactNode;
-  badge?: number;
-};
 
 const STROKE = {
   width: 18,
@@ -42,6 +16,118 @@ const STROKE = {
   strokeWidth: 2,
   strokeLinecap: "round" as const,
   strokeLinejoin: "round" as const,
+};
+
+const ICONS: Partial<Record<NavKey, React.ReactNode>> = {
+  inicio: (
+    <svg {...STROKE}>
+      <path d="M3 9.5 12 3l9 6.5" />
+      <path d="M5 10v10h14V10" />
+      <path d="M9 21v-6h6v6" />
+    </svg>
+  ),
+  brokers: (
+    <svg {...STROKE}>
+      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+    </svg>
+  ),
+  aprobaciones: (
+    <svg {...STROKE}>
+      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+      <polyline points="22 4 12 14.01 9 11.01" />
+    </svg>
+  ),
+  eventos: (
+    <svg {...STROKE}>
+      <rect x="3" y="4" width="18" height="18" rx="2" />
+      <line x1="16" y1="2" x2="16" y2="6" />
+      <line x1="8" y1="2" x2="8" y2="6" />
+      <line x1="3" y1="10" x2="21" y2="10" />
+    </svg>
+  ),
+  avisos: (
+    <svg {...STROKE}>
+      <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+      <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+    </svg>
+  ),
+  rifas: (
+    <svg {...STROKE}>
+      <path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z" />
+      <path d="M13 5v2" />
+      <path d="M13 17v2" />
+      <path d="M13 11v2" />
+    </svg>
+  ),
+  envivo: (
+    <svg {...STROKE}>
+      <circle cx="12" cy="12" r="2" />
+      <path d="M16.24 7.76a6 6 0 0 1 0 8.49" />
+      <path d="M7.76 16.24a6 6 0 0 1 0-8.49" />
+      <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+      <path d="M4.93 19.07a10 10 0 0 1 0-14.14" />
+    </svg>
+  ),
+  panorama: (
+    <svg {...STROKE}>
+      <line x1="12" x2="12" y1="20" y2="10" />
+      <line x1="18" x2="18" y1="20" y2="4" />
+      <line x1="6" x2="6" y1="20" y2="16" />
+    </svg>
+  ),
+  reportes: (
+    <svg {...STROKE}>
+      <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
+      <line x1="4" x2="4" y1="22" y2="15" />
+    </svg>
+  ),
+  salidas: (
+    <svg {...STROKE}>
+      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+      <polyline points="16 17 21 12 16 7" />
+      <line x1="21" x2="9" y1="12" y2="12" />
+    </svg>
+  ),
+  zonas: (
+    <svg {...STROKE}>
+      <path d="m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3z" />
+      <path d="M9 3v15" />
+      <path d="M15 6v15" />
+    </svg>
+  ),
+  mapa: (
+    <svg {...STROKE}>
+      <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z" />
+      <circle cx="12" cy="10" r="3" />
+    </svg>
+  ),
+  whatsapp: (
+    <svg {...STROKE}>
+      <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z" />
+    </svg>
+  ),
+  almacenamiento: (
+    <svg {...STROKE}>
+      <ellipse cx="12" cy="5" rx="9" ry="3" />
+      <path d="M3 5V19A9 3 0 0 0 21 19V5" />
+      <path d="M3 12A9 3 0 0 0 21 12" />
+    </svg>
+  ),
+  lifecycle: (
+    <svg {...STROKE}>
+      <circle cx="12" cy="12" r="10" />
+      <path d="M12 6v6l4 2" />
+    </svg>
+  ),
+  ubicaciones: (
+    <svg {...STROKE}>
+      <path d="M12 21s-6-5.3-6-10a6 6 0 0 1 12 0c0 4.7-6 10-6 10z" />
+      <circle cx="12" cy="11" r="2" />
+    </svg>
+  ),
 };
 
 export function MobileNav({
@@ -84,205 +170,12 @@ export function MobileNav({
     return () => window.removeEventListener("keydown", onKey);
   }, [open]);
 
-  const main: Item[] = [
-    {
-      href: "/",
-      label: "Inicio",
-      key: "inicio",
-      icon: (
-        <svg {...STROKE}>
-          <path d="M3 9.5 12 3l9 6.5" />
-          <path d="M5 10v10h14V10" />
-          <path d="M9 21v-6h6v6" />
-        </svg>
-      ),
-    },
-    {
-      href: "/brokers",
-      label: "Miembros",
-      key: "brokers",
-      icon: (
-        <svg {...STROKE}>
-          <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-          <circle cx="9" cy="7" r="4" />
-          <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
-          <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-        </svg>
-      ),
-    },
-    {
-      href: "/aprobaciones",
-      label: "Aprobaciones",
-      key: "aprobaciones",
-      badge: pendingUsers,
-      icon: (
-        <svg {...STROKE}>
-          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-          <polyline points="22 4 12 14.01 9 11.01" />
-        </svg>
-      ),
-    },
-    {
-      href: "/eventos",
-      label: "Eventos",
-      key: "eventos",
-      icon: (
-        <svg {...STROKE}>
-          <rect x="3" y="4" width="18" height="18" rx="2" />
-          <line x1="16" y1="2" x2="16" y2="6" />
-          <line x1="8" y1="2" x2="8" y2="6" />
-          <line x1="3" y1="10" x2="21" y2="10" />
-        </svg>
-      ),
-    },
-    {
-      href: "/avisos",
-      label: "Avisos",
-      key: "avisos",
-      icon: (
-        <svg {...STROKE}>
-          <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
-          <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-        </svg>
-      ),
-    },
-    {
-      href: "/rifas",
-      label: "Rifas",
-      key: "rifas",
-      icon: (
-        <svg {...STROKE}>
-          <path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z" />
-          <path d="M13 5v2" />
-          <path d="M13 17v2" />
-          <path d="M13 11v2" />
-        </svg>
-      ),
-    },
-    {
-      href: "/en-vivo",
-      label: "En vivo",
-      key: "envivo",
-      icon: (
-        <svg {...STROKE}>
-          <circle cx="12" cy="12" r="2" />
-          <path d="M16.24 7.76a6 6 0 0 1 0 8.49" />
-          <path d="M7.76 16.24a6 6 0 0 1 0-8.49" />
-          <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
-          <path d="M4.93 19.07a10 10 0 0 1 0-14.14" />
-        </svg>
-      ),
-    },
-    {
-      href: "/panorama",
-      label: "Panorama",
-      key: "panorama",
-      icon: (
-        <svg {...STROKE}>
-          <line x1="12" x2="12" y1="20" y2="10" />
-          <line x1="18" x2="18" y1="20" y2="4" />
-          <line x1="6" x2="6" y1="20" y2="16" />
-        </svg>
-      ),
-    },
-    {
-      href: "/reportes",
-      label: "Reportes",
-      key: "reportes",
-      badge: openReports,
-      icon: (
-        <svg {...STROKE}>
-          <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
-          <line x1="4" x2="4" y1="22" y2="15" />
-        </svg>
-      ),
-    },
-    {
-      href: "/salidas",
-      label: "Salidas",
-      key: "salidas",
-      icon: (
-        <svg {...STROKE}>
-          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-          <polyline points="16 17 21 12 16 7" />
-          <line x1="21" x2="9" y1="12" y2="12" />
-        </svg>
-      ),
-    },
-    {
-      href: "/zonas",
-      label: "Zonas",
-      key: "zonas",
-      icon: (
-        <svg {...STROKE}>
-          <path d="m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3z" />
-          <path d="M9 3v15" />
-          <path d="M15 6v15" />
-        </svg>
-      ),
-    },
-    {
-      href: "/mapa",
-      label: "Mapa",
-      key: "mapa",
-      icon: (
-        <svg {...STROKE}>
-          <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z" />
-          <circle cx="12" cy="10" r="3" />
-        </svg>
-      ),
-    },
-  ];
+  const counts = { openReports, pendingUsers };
+  const nav = navFor(isDev);
 
-  const dev: Item[] = [
-    {
-      href: "/whatsapp",
-      label: "WhatsApp",
-      key: "whatsapp",
-      icon: (
-        <svg {...STROKE}>
-          <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z" />
-        </svg>
-      ),
-    },
-    {
-      href: "/almacenamiento",
-      label: "Almacenamiento",
-      key: "almacenamiento",
-      icon: (
-        <svg {...STROKE}>
-          <ellipse cx="12" cy="5" rx="9" ry="3" />
-          <path d="M3 5V19A9 3 0 0 0 21 19V5" />
-          <path d="M3 12A9 3 0 0 0 21 12" />
-        </svg>
-      ),
-    },
-    {
-      href: "/lifecycle",
-      label: "Ciclo de vida",
-      key: "lifecycle",
-      icon: (
-        <svg {...STROKE}>
-          <circle cx="12" cy="12" r="10" />
-          <path d="M12 6v6l4 2" />
-        </svg>
-      ),
-    },
-    {
-      href: "/ubicaciones",
-      label: "Ubicaciones",
-      key: "ubicaciones",
-      icon: (
-        <svg {...STROKE}>
-          <path d="M12 21s-6-5.3-6-10a6 6 0 0 1 12 0c0 4.7-6 10-6 10z" />
-          <circle cx="12" cy="11" r="2" />
-        </svg>
-      ),
-    },
-  ];
-
-  const item = (i: Item) => {
+  const item = (i: NavLink) => {
     const isActive = active === i.key;
+    const n = countFor(i, counts);
     return (
       <Link
         key={i.key}
@@ -295,12 +188,12 @@ export function MobileNav({
         }`}
       >
         <span className={isActive ? "text-brand" : "text-neutral-400"}>
-          {i.icon}
+          {ICONS[i.key]}
         </span>
         {i.label}
-        {i.badge && i.badge > 0 ? (
+        {n > 0 ? (
           <span className="ml-auto grid h-5 min-w-5 place-items-center rounded-full bg-rose-500 px-1.5 text-[11px] font-semibold tabular-nums text-white">
-            {i.badge}
+            {n}
           </span>
         ) : null}
       </Link>
@@ -308,7 +201,7 @@ export function MobileNav({
   };
 
   return (
-    <div className="md:hidden">
+    <div className="navsm:hidden">
       <button
         onClick={() => setOpen(true)}
         aria-label="Abrir menú"
@@ -327,7 +220,7 @@ export function MobileNav({
           overlay to <body> to escape it. */}
       {mounted
         ? createPortal(
-            <div className="md:hidden">
+            <div className="navsm:hidden">
       {/* Backdrop */}
       <div
         onClick={() => setOpen(false)}
@@ -372,15 +265,20 @@ export function MobileNav({
         </div>
 
         <nav className="flex-1 space-y-0.5 overflow-y-auto p-3">
-          {main.map(item)}
-          {isDev ? (
-            <>
-              <div className="px-3.5 pb-1 pt-4 text-[11px] font-semibold uppercase tracking-wide text-neutral-400">
-                Técnico
+          {/* Same sections as the desktop dropdowns (lib/nav.ts). Loose links
+              (Inicio, Avisos) go first — after a section they'd read as part
+              of it. */}
+          {nav.map((e) => (e.kind === "link" ? item(e) : null))}
+          {nav.map((e) =>
+            e.kind === "link" ? null : (
+              <div key={e.id}>
+                <div className="px-3.5 pb-1 pt-4 text-[11px] font-semibold uppercase tracking-wide text-neutral-400">
+                  {e.label}
+                </div>
+                {e.items.map(item)}
               </div>
-              {dev.map(item)}
-            </>
-          ) : null}
+            ),
+          )}
         </nav>
 
         <div className="border-t border-neutral-100 p-3">
