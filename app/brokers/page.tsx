@@ -1,17 +1,26 @@
-import { fetchOverview } from "@/lib/data";
-import { StatCard } from "@/components/StatCard";
-import { BrokerTable } from "@/components/BrokerTable";
+import { fetchOverview, type BrokerRow } from "@/lib/data";
+import { BrokerTable, type MemberStats } from "@/components/BrokerTable";
 import { TopNav } from "@/components/TopNav";
+
+// Cards you'd act on (2026-09-28) — the old ones (Miembros / Aprobados /
+// Pendientes / Propiedades) repeated the tab counts: 1,536 of 1,537 are
+// approved, and pending already has its badge on «Aprobaciones».
+function memberStats(brokers: BrokerRow[]): MemberStats {
+  const now = Date.now();
+  const within = (iso: string | null, days: number) =>
+    !!iso && now - new Date(iso).getTime() <= days * 86_400_000;
+  return {
+    nuevos: brokers.filter((b) => within(b.created_at, 7)).length,
+    activos: brokers.filter((b) => within(b.last_active, 7)).length,
+    nunca: brokers.filter((b) => !b.last_active).length,
+    conInventario: brokers.filter((b) => b.inventory > 0).length,
+  };
+}
 
 // Always fetch fresh — this is an ops view, never cache it.
 export const dynamic = "force-dynamic";
 
-export default async function DashboardPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ q?: string }>;
-}) {
-  const { q } = await searchParams;
+export default async function DashboardPage() {
   let data;
   try {
     data = await fetchOverview();
@@ -29,65 +38,14 @@ export default async function DashboardPage({
     );
   }
 
-  const { brokers, totals } = data;
+  const { brokers } = data;
 
   return (
     <div className="flex min-h-screen flex-col">
       <TopNav active="brokers" />
       <BrokerTable
         brokers={brokers}
-        initialQuery={q ?? ""}
-        stats={
-            <section className="mb-5 grid grid-cols-2 gap-4 sm:grid-cols-4">
-              <StatCard
-                label="Miembros"
-                value={totals.brokers}
-                tint={{ bg: "#e8edff", fg: "#1c4588" }}
-                icon={
-                  <>
-                    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-                    <circle cx="9" cy="7" r="4" />
-                    <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
-                    <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-                  </>
-                }
-              />
-              <StatCard
-                label="Aprobados"
-                value={totals.approved}
-                tint={{ bg: "#d8f5e6", fg: "#047857" }}
-                icon={
-                  <>
-                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-                    <path d="m9 11 3 3L22 4" />
-                  </>
-                }
-              />
-              <StatCard
-                label="Pendientes"
-                value={totals.pending}
-                tint={{ bg: "#fdf0d5", fg: "#b45309" }}
-                icon={
-                  <>
-                    <circle cx="12" cy="12" r="10" />
-                    <path d="M12 6v6l4 2" />
-                  </>
-                }
-              />
-              <StatCard
-                label="Propiedades"
-                value={totals.properties}
-                tint={{ bg: "#ede9fe", fg: "#7c3aed" }}
-                icon={
-                  <>
-                    <path d="M3 9.5 12 3l9 6.5" />
-                    <path d="M5 10v10h14V10" />
-                    <path d="M9 21v-6h6v6" />
-                  </>
-                }
-              />
-            </section>
-        }
+        stats={memberStats(brokers)}
       />
     </div>
   );

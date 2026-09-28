@@ -57,14 +57,16 @@ export function PillSegment<T extends string>({
   options: [T, string][];
 }) {
   return (
-    <div className="inline-flex items-center rounded-full">
+    // Scrolls sideways inside itself when it can't fit (Miembros' five tiers
+    // are wider than a 390px phone) instead of widening the whole page.
+    <div className="inline-flex max-w-full items-center overflow-x-auto rounded-full [scrollbar-width:none]">
       {options.map(([k, label]) => (
         <button
           key={k}
           type="button"
           onClick={() => onChange(k)}
           aria-pressed={value === k}
-          className={`h-8 rounded-full px-3.5 text-sm font-medium transition ${
+          className={`h-8 shrink-0 whitespace-nowrap rounded-full px-3.5 text-sm font-medium transition ${
             value === k
               ? "bg-white text-neutral-900 shadow-sm"
               : "text-neutral-500 hover:text-neutral-900"
@@ -80,7 +82,7 @@ export function PillSegment<T extends string>({
 // The grey tray that groups the filters on the left of a toolbar.
 export function PillTray({ children }: { children: React.ReactNode }) {
   return (
-    <div className="inline-flex flex-wrap items-center gap-1 rounded-full bg-neutral-100 p-1">
+    <div className="inline-flex max-w-full flex-wrap items-center gap-1 rounded-full bg-neutral-100 p-1">
       {children}
     </div>
   );

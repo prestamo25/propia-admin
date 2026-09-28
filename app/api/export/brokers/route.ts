@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { fetchOverview } from "@/lib/data";
-import { filterBrokers } from "@/lib/brokerFilter";
+import { filterBrokers, filtersFromParams } from "@/lib/brokerFilter";
 import { getRole } from "@/lib/session";
 import { fmtDate, statusLabel } from "@/lib/format";
 import { buildXlsx, type Column } from "@/lib/xlsx";
@@ -9,7 +9,8 @@ export const dynamic = "force-dynamic";
 
 // The brokers list as a real .xlsx — the contact sheet Pablo works from for
 // campaigns. Sorted A–Z by name (it's a contact list, not a timeline) and
-// filtered by the same ?q= the table's search box uses.
+// filtered by exactly the table's filters — same params as its URL
+// (lib/brokerFilter.ts).
 
 const COLUMNS: Column[] = [
   { header: "Nombre", width: 30 },
@@ -29,10 +30,10 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "No autorizado." }, { status: 401 });
   }
 
-  const q = new URL(req.url).searchParams.get("q") ?? "";
+  const filters = filtersFromParams(new URL(req.url).searchParams);
   const { brokers } = await fetchOverview();
 
-  const rows = filterBrokers(brokers, q)
+  const rows = filterBrokers(brokers, filters)
     .sort((a, b) => (a.name ?? "").localeCompare(b.name ?? "", "es"))
     .map((b) => [
       b.name ?? "",
