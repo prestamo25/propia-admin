@@ -793,6 +793,12 @@ async function decideVerification(
   });
   if (error) {
     // The function refuses stale transitions (double click, another tab).
+    if (/cannot (verified|rejected) from none/.test(error.message)) {
+      return { error: "Esta persona ya no tiene una solicitud de verificación — recarga la página." };
+    }
+    if (error.message.includes("not eligible")) {
+      return { error: "Invitados y clientes no se pueden verificar." };
+    }
     if (/cannot (revoke|verified|rejected) from/.test(error.message)) {
       return { error: "Alguien ya decidió esta verificación — recarga la página." };
     }

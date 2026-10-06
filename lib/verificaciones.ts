@@ -100,12 +100,24 @@ export async function fetchVerifications(): Promise<{
       .eq("verification_status", "pending")
       .eq("status", "approved")
       .order("verification_submitted_at", { ascending: true }),
-    sb
-      .from("users")
-      .select(COLS)
-      .in("verification_status", ["verified", "rejected", "revoked"])
-      .order("verification_submitted_at", { ascending: false })
-      .limit(40),
+    // «Decididas» = the 40 most recent DECISIONS (by event), not the 40 most
+    // recent submissions — an old member revoked today must show up.
+    (async () => {
+      const ev = await sb
+        .from("verification_events")
+        .select("user_id")
+        .in("kind", ["verified", "rejected", "revoked"])
+        .order("created_at", { ascending: false })
+        .limit(400);
+      if (ev.error) return { data: null, error: ev.error };
+      const ids = [...new Set((ev.data ?? []).map((r) => r.user_id as string))].slice(0, 40);
+      if (!ids.length) return { data: [], error: null };
+      return sb
+        .from("users")
+        .select(COLS)
+        .in("id", ids)
+        .in("verification_status", ["verified", "rejected", "revoked"]);
+    })(),
   ]);
   if (pendingRes.error) throw new Error(pendingRes.error.message);
   if (decidedRes.error) throw new Error(decidedRes.error.message);
