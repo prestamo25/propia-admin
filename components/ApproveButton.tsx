@@ -22,6 +22,7 @@ const AS_OPTIONS = [
   "asesor",
   "invitado",
   "cliente",
+  "inmobiliaria",
   "notaria",
   "creditos",
   "polizas",
@@ -36,6 +37,8 @@ const AS_HINT: Record<string, string> = {
   asesor: "app completa de broker",
   invitado: "eventos y servicios · no aparece en el directorio",
   cliente: "ve el inventario de su asesor",
+  inmobiliaria: "arma su equipo de asesores",
+  asociacion: "arma su equipo de miembros",
 };
 
 export function ApproveButton({

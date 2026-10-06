@@ -10,6 +10,7 @@ export const PROFILE_TYPE_LABEL: Record<string, string> = {
   constructor: "Constructor",
   decoracion: "Decoración",
   valuador: "Valuador",
+  inmobiliaria: "Inmobiliaria",
   asociacion: "Asociación",
   educacion: "Educación",
   otros: "Otros",
