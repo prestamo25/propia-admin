@@ -5,6 +5,8 @@ import { fetchMemberDossier, type Person } from "@/lib/miembro";
 import type { Listing } from "@/lib/data";
 import { BlockButton } from "@/components/BlockButton";
 import { PlanCard } from "@/components/PlanCard";
+import { VerificationCard } from "@/components/VerificationCard";
+import { fetchMemberVerification } from "@/lib/verificaciones";
 import { avatarColors, fmtDate, initials, relative, fmtPhone, waHref } from "@/lib/format";
 import { profileDetails, profileTypeLabel, tierOf } from "@/lib/profileTypes";
 import { ATTENDEE_STATUS_LABEL, fmtStamp, fmtWhen } from "@/lib/eventos";
@@ -133,7 +135,7 @@ function ListingCard({ l }: { l: Listing }) {
 
 export default async function BrokerPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const d = await fetchMemberDossier(id);
+  const [d, verification] = await Promise.all([fetchMemberDossier(id), fetchMemberVerification(id)]);
   if (!d) notFound();
   const { broker } = d;
   const c = avatarColors(broker.name);
@@ -265,6 +267,22 @@ export default async function BrokerPage({ params }: { params: Promise<{ id: str
             />
           </Section>
         </div>
+
+        {/* Verificado (blue check) — state, revoke, history. */}
+        {verification ? (
+          <div id="verificacion">
+            <Section title="Verificación">
+              <VerificationCard
+                id={broker.id}
+                name={broker.name}
+                eligible={!["invitado", "cliente"].includes(d.profile_type)}
+                status={verification.status}
+                verifiedAt={verification.verified_at}
+                events={verification.events}
+              />
+            </Section>
+          </div>
+        ) : null}
 
         {/* Inventory */}
         <Section title="Inventario" count={broker.listings.length}>

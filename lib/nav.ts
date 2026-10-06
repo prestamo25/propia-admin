@@ -11,6 +11,7 @@ export type NavKey =
   | "inicio"
   | "brokers"
   | "aprobaciones"
+  | "verificaciones"
   | "eventos"
   | "alta"
   | "envivo"
@@ -26,7 +27,7 @@ export type NavKey =
   | "avisos"
   | "rifas";
 
-export type NavCounts = { pendingUsers: number; openReports: number };
+export type NavCounts = { pendingUsers: number; openReports: number; pendingVerifications: number };
 
 export type NavLink = {
   key: NavKey;
@@ -58,6 +59,13 @@ export const NAV: NavEntry[] = [
     href: "/aprobaciones",
     label: "Aprobaciones",
     badge: "pendingUsers",
+  },
+  {
+    kind: "link",
+    key: "verificaciones",
+    href: "/verificaciones",
+    label: "Verificaciones",
+    badge: "pendingVerifications",
   },
   {
     kind: "link",

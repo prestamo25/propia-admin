@@ -1,11 +1,12 @@
 import Link from "next/link";
 import { countOpenReports } from "@/lib/reports";
 import { countPendingUsers } from "@/lib/aprobaciones";
+import { countPendingVerifications } from "@/lib/verificaciones";
 import { getRole } from "@/lib/session";
 import { MobileNav } from "@/components/MobileNav";
 import { countFor, navFor, type NavCounts, type NavKey, type NavLink } from "@/lib/nav";
 
-// Grouped nav (2026-09-28): Inicio · Miembros · Aprobaciones · Reportes ·
+// Grouped nav (2026-09-28): Inicio · Miembros · Aprobaciones · Verificaciones (10-06) · Reportes ·
 // Eventos ▾ · Avisos · Datos ▾ · Técnico ▾ — the entries live in lib/nav.ts.
 // The old fold-into-«Más» tiers are gone: below navmd (1000px) the tabs just
 // tighten (px-2, no brand word / role badge / «Grupo · Página» hint, Salir →
@@ -47,12 +48,13 @@ const chevron = (
 );
 
 export async function TopNav({ active }: { active: NavKey }) {
-  const [openReports, pendingUsers, role] = await Promise.all([
+  const [openReports, pendingUsers, pendingVerifications, role] = await Promise.all([
     countOpenReports(),
     countPendingUsers(),
+    countPendingVerifications(),
     getRole(),
   ]);
-  const counts: NavCounts = { openReports, pendingUsers };
+  const counts: NavCounts = { openReports, pendingUsers, pendingVerifications };
   const isDev = role === "dev";
   const roleBadge =
     role === "dev"
@@ -255,6 +257,7 @@ export async function TopNav({ active }: { active: NavKey }) {
           roleBadge={roleBadge}
           openReports={openReports}
           pendingUsers={pendingUsers}
+          pendingVerifications={pendingVerifications}
         />
       </div>
     </header>

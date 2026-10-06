@@ -40,6 +40,12 @@ const ICONS: Partial<Record<NavKey, React.ReactNode>> = {
       <polyline points="22 4 12 14.01 9 11.01" />
     </svg>
   ),
+  verificaciones: (
+    <svg {...STROKE}>
+      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+      <path d="m9 12 2 2 4-4" />
+    </svg>
+  ),
   eventos: (
     <svg {...STROKE}>
       <rect x="3" y="4" width="18" height="18" rx="2" />
@@ -136,12 +142,14 @@ export function MobileNav({
   roleBadge,
   openReports,
   pendingUsers,
+  pendingVerifications,
 }: {
   active: NavKey;
   isDev: boolean;
   roleBadge: { label: string; cls: string };
   openReports: number;
   pendingUsers: number;
+  pendingVerifications: number;
 }) {
   const [open, setOpen] = useState(false);
   // Portal target only exists client-side; false during SSR/hydration.
@@ -170,7 +178,7 @@ export function MobileNav({
     return () => window.removeEventListener("keydown", onKey);
   }, [open]);
 
-  const counts = { openReports, pendingUsers };
+  const counts = { openReports, pendingUsers, pendingVerifications };
   const nav = navFor(isDev);
 
   const item = (i: NavLink) => {

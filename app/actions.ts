@@ -771,3 +771,46 @@ export async function drawRaffleWinner(input: {
     },
   };
 }
+
+// «Verificado» (verificacion-asesor-2026-10-06). set_verification() is the
+// single writer (service_role only) and logs who decided to
+// verification_events. A reject/revoke reason is what the member reads in
+// the app, so it must be a sentence they can act on.
+async function decideVerification(
+  id: string,
+  status: "verified" | "rejected" | "revoked",
+  reason: string | null,
+): Promise<Result> {
+  if (!id) return { error: "Falta el id." };
+  const clean = reason?.trim() ?? "";
+  if (status !== "verified" && clean.length < 3) return { error: "Escribe un motivo." };
+  const sb = supabaseAdmin();
+  const { error } = await sb.rpc("set_verification", {
+    p_user: id,
+    p_status: status,
+    p_reason: status === "verified" ? null : clean,
+    p_actor: await reviewer(),
+  });
+  if (error) {
+    // The function refuses stale transitions (double click, another tab).
+    if (/cannot (revoke|verified|rejected) from/.test(error.message)) {
+      return { error: "Alguien ya decidió esta verificación — recarga la página." };
+    }
+    return { error: error.message };
+  }
+  revalidatePath("/verificaciones");
+  revalidatePath(`/broker/${id}`);
+  return {};
+}
+
+export async function verifyMember(id: string): Promise<Result> {
+  return decideVerification(id, "verified", null);
+}
+
+export async function rejectVerification(id: string, reason: string): Promise<Result> {
+  return decideVerification(id, "rejected", reason);
+}
+
+export async function revokeVerification(id: string, reason: string): Promise<Result> {
+  return decideVerification(id, "revoked", reason);
+}
