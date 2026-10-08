@@ -25,7 +25,8 @@ export type NavKey =
   | "mapa"
   | "ubicaciones"
   | "avisos"
-  | "rifas";
+  | "rifas"
+  | "desarrollos";
 
 export type NavCounts = { pendingUsers: number; openReports: number; pendingVerifications: number };
 
@@ -86,6 +87,8 @@ export const NAV: NavEntry[] = [
     ],
   },
   { kind: "link", key: "avisos", href: "/avisos", label: "Avisos" },
+  // Constructora developments (app 2.0.0; pilot since 2026-10-07).
+  { kind: "link", key: "desarrollos", href: "/desarrollos", label: "Desarrollos" },
   {
     kind: "group",
     id: "datos",
