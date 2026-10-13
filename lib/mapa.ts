@@ -120,7 +120,8 @@ const chunk = <T,>(xs: T[], n: number) =>
 // by state, requerimientos whose states overlap, WhatsApp asks by the group's
 // estado) and `redact` strips every person before anything leaves the server
 // — owners, the requerimiento's private title (the broker's client label), the
-// group and its sender — plus the test-account plumbing.
+// group and its sender — plus the test-account plumbing — and leaves out what
+// a broker keeps private (visibility 'private' listings and requerimientos).
 export type MapScope = { estados?: string[] | null; redact?: boolean };
 
 export async function fetchMapData(scope: MapScope = {}): Promise<MapData> {
@@ -142,7 +143,8 @@ export async function fetchMapData(scope: MapScope = {}): Promise<MapData> {
         .eq("lifecycle", "active")
         .is("archived_at", null)
         .or("source.is.null,source.neq.whatsapp");
-      return (estados ? q.in("state", estados) : q).order("created_at", { ascending: false });
+      const scoped = estados ? q.in("state", estados) : q;
+      return (redact ? scoped.neq("visibility", "private") : scoped).order("created_at", { ascending: false });
     }),
     pageAll<ReqRow>(() => {
       const q = sb
@@ -150,7 +152,8 @@ export async function fetchMapData(scope: MapScope = {}): Promise<MapData> {
         .select("id, title, transaction, types, states, price_min, price_max, lat, lng, radius_km, zona_key, zona_keys, created_by, created_at")
         .eq("status", "open")
         .eq("lifecycle", "active");
-      return (estados ? q.overlaps("states", estados) : q).order("created_at", { ascending: false });
+      const scoped = estados ? q.overlaps("states", estados) : q;
+      return (redact ? scoped.neq("visibility", "private") : scoped).order("created_at", { ascending: false });
     }),
     estados && groupJids.length === 0
       ? Promise.resolve([] as WaRow[])
