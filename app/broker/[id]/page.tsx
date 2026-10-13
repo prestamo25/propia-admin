@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
-import { fetchMemberDossier, type Dossier, type Person } from "@/lib/miembro";
+import { fetchMemberDossier, type Dossier, type MemberRequest, type Person } from "@/lib/miembro";
 import type { Listing } from "@/lib/data";
 import { logMemberView, requireViewer, type Access, type Viewer } from "@/lib/access";
 import { BlockButton } from "@/components/BlockButton";
@@ -104,6 +104,44 @@ function PersonRow({ p, right }: { p: Person; right?: ReactNode }) {
   );
 }
 
+// Phones (2026-10-13 mobile check): requerimientos as cards — the table
+// scrolled sideways inside its card and hid «Creado». The table stays from sm up.
+// `regional` drops what a viewer outside the team never sees (client label,
+// status, the reference address).
+function RequestCards({ requests, regional }: { requests: MemberRequest[]; regional: boolean }) {
+  return (
+    <ul className="space-y-2 sm:hidden">
+      {requests.map((r) => (
+        <li key={r.id} className="rounded-2xl bg-white px-4 py-3 shadow-sm ring-1 ring-black/[0.05]">
+          {regional ? null : (
+            <div className="flex min-w-0 items-center gap-1.5 text-sm font-medium text-neutral-900">
+              <span className="truncate">{r.title ?? "—"}</span>
+              {r.visibility === "private" ? (
+                <span className="shrink-0 rounded-md bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">Privado</span>
+              ) : null}
+            </div>
+          )}
+          <div className="text-sm text-neutral-700">
+            {[r.transaction === "renta" ? "Renta" : r.transaction === "venta" ? "Venta" : r.transaction, r.types.map((t) => TYPE_LABELS[t] ?? t).join("/")].filter(Boolean).join(" · ")}
+          </div>
+          <div className="mt-1 flex items-baseline justify-between gap-3 text-xs">
+            <span className="min-w-0 truncate text-neutral-500">{(regional ? r.states.join(", ") : (r.zona ?? r.states.join(", "))) || "—"}</span>
+            <span className="shrink-0 tabular-nums text-neutral-800">{r.price_max != null ? `hasta $${r.price_max.toLocaleString("en-US")}` : "—"}</span>
+          </div>
+          <div className="mt-1.5 flex items-center gap-2 text-[11px] text-neutral-400">
+            {regional ? null : (
+              <span className={`rounded-md px-1.5 py-0.5 font-semibold ${r.status === "open" ? "bg-sky-50 text-sky-700" : "bg-neutral-100 text-neutral-500"}`}>
+                {REQ_STATUS[r.status ?? ""] ?? r.status}
+              </span>
+            )}
+            {fmtDate(r.created_at)}
+          </div>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function ListingCard({ l }: { l: Listing }) {
   return (
     <li className="flex gap-3 rounded-xl bg-white p-3 shadow-sm ring-1 ring-black/[0.05]">
@@ -190,7 +228,7 @@ async function RegionalMember({ d, viewer, access }: { d: Dossier; viewer: Viewe
       <MemberHeader />
       <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
         <div className="mb-6 rounded-2xl border border-black/[0.05] bg-gradient-to-b from-white to-neutral-50/40 p-6 shadow-soft backdrop-blur-sm">
-          <div className="flex flex-wrap items-start gap-5">
+          <div className="flex flex-wrap items-start gap-x-5 gap-y-4">
             {broker.avatar_url ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={broker.avatar_url} alt="" className="h-16 w-16 shrink-0 rounded-2xl object-cover ring-1 ring-black/[0.06]" />
@@ -212,43 +250,45 @@ async function RegionalMember({ d, viewer, access }: { d: Dossier; viewer: Viewe
               </div>
               {broker.company ? <p className="mt-0.5 text-sm text-neutral-500">{broker.company}</p> : null}
               {d.bio ? <p className="mt-2 max-w-2xl text-sm text-neutral-600">{d.bio}</p> : null}
-
-              <dl className="mt-4 grid grid-cols-2 gap-x-8 gap-y-3 text-sm sm:grid-cols-3 lg:grid-cols-4">
-                {access.verTelefonos ? (
-                  <Meta label="Teléfono">
-                    {broker.phone ? (
-                      <a href={waHref(broker.phone)} target="_blank" rel="noreferrer" className="tabular-nums text-brand hover:underline">
-                        {fmtPhone(broker.phone)}
-                      </a>
-                    ) : "—"}
-                  </Meta>
-                ) : null}
-                <Meta label="Estados">{broker.states.length ? broker.states.join(", ") : "—"}</Meta>
-                <Meta label="Zonas">{d.zonas.length ? d.zonas.join(", ") : "—"}</Meta>
-                <Meta label="Miembro desde">{fmtDate(broker.created_at)}</Meta>
-                <Meta label="Última actividad">
-                  <span className="inline-flex items-center gap-1.5">
-                    <span className={`h-1.5 w-1.5 rounded-full ${act.fresh ? "bg-emerald-500" : "bg-neutral-300"}`} />
-                    {act.label}
-                  </span>
-                </Meta>
-                {d.instagram ? (
-                  <Meta label="Instagram">
-                    <a href={`https://instagram.com/${d.instagram.replace(/^@/, "")}`} target="_blank" rel="noreferrer" className="text-brand hover:underline">@{d.instagram.replace(/^@/, "")}</a>
-                  </Meta>
-                ) : null}
-                {d.facebook ? (
-                  <Meta label="Facebook">
-                    <a href={d.facebook.startsWith("http") ? d.facebook : `https://facebook.com/${d.facebook}`} target="_blank" rel="noreferrer" className="truncate text-brand hover:underline">{d.facebook}</a>
-                  </Meta>
-                ) : null}
-                {details.filter((x) => !(d.profile_type === "otros" && x.key === "giro")).map((x) => (
-                  <Meta key={x.key} label={x.label}>
-                    {x.href ? <a href={x.href} target="_blank" rel="noreferrer" className="text-brand hover:underline">{x.value}</a> : x.value}
-                  </Meta>
-                ))}
-              </dl>
             </div>
+            {/* Phones (2026-10-13 mobile check): the details get the full width
+                under photo + name — beside them they squeezed to «+52 …». From
+                sm up they line up under the name again (64px photo + 20px gap). */}
+            <dl className="grid basis-full grid-cols-2 gap-x-8 gap-y-3 text-sm sm:grid-cols-3 sm:pl-[84px] lg:grid-cols-4">
+              {access.verTelefonos ? (
+                <Meta label="Teléfono">
+                  {broker.phone ? (
+                    <a href={waHref(broker.phone)} target="_blank" rel="noreferrer" className="tabular-nums text-brand hover:underline">
+                      {fmtPhone(broker.phone)}
+                    </a>
+                  ) : "—"}
+                </Meta>
+              ) : null}
+              <Meta label="Estados">{broker.states.length ? broker.states.join(", ") : "—"}</Meta>
+              <Meta label="Zonas">{d.zonas.length ? d.zonas.join(", ") : "—"}</Meta>
+              <Meta label="Miembro desde">{fmtDate(broker.created_at)}</Meta>
+              <Meta label="Última actividad">
+                <span className="inline-flex items-center gap-1.5">
+                  <span className={`h-1.5 w-1.5 rounded-full ${act.fresh ? "bg-emerald-500" : "bg-neutral-300"}`} />
+                  {act.label}
+                </span>
+              </Meta>
+              {d.instagram ? (
+                <Meta label="Instagram">
+                  <a href={`https://instagram.com/${d.instagram.replace(/^@/, "")}`} target="_blank" rel="noreferrer" className="text-brand hover:underline">@{d.instagram.replace(/^@/, "")}</a>
+                </Meta>
+              ) : null}
+              {d.facebook ? (
+                <Meta label="Facebook">
+                  <a href={d.facebook.startsWith("http") ? d.facebook : `https://facebook.com/${d.facebook}`} target="_blank" rel="noreferrer" className="truncate text-brand hover:underline">{d.facebook}</a>
+                </Meta>
+              ) : null}
+              {details.filter((x) => !(d.profile_type === "otros" && x.key === "giro")).map((x) => (
+                <Meta key={x.key} label={x.label}>
+                  {x.href ? <a href={x.href} target="_blank" rel="noreferrer" className="text-brand hover:underline">{x.value}</a> : x.value}
+                </Meta>
+              ))}
+            </dl>
           </div>
         </div>
 
@@ -271,7 +311,8 @@ async function RegionalMember({ d, viewer, access }: { d: Dossier; viewer: Viewe
 
         {requests.length > 0 ? (
           <Section title="Requerimientos" count={requests.length}>
-            <div className="overflow-x-auto rounded-2xl bg-white shadow-sm ring-1 ring-black/[0.05]">
+            <RequestCards requests={requests} regional />
+            <div className="hidden overflow-x-auto rounded-2xl bg-white shadow-sm ring-1 ring-black/[0.05] sm:block">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-left text-xs uppercase tracking-wide text-neutral-400">
@@ -352,7 +393,7 @@ export default async function BrokerPage({ params }: { params: Promise<{ id: str
       <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
         {/* Identity */}
         <div className="mb-6 rounded-2xl border border-black/[0.05] bg-gradient-to-b from-white to-neutral-50/40 p-6 shadow-soft backdrop-blur-sm">
-          <div className="flex flex-wrap items-start gap-5">
+          <div className="flex flex-wrap items-start gap-x-5 gap-y-4">
             {broker.avatar_url ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={broker.avatar_url} alt="" className="h-16 w-16 shrink-0 rounded-2xl object-cover ring-1 ring-black/[0.06]" />
@@ -379,46 +420,8 @@ export default async function BrokerPage({ params }: { params: Promise<{ id: str
               </div>
               {broker.company ? <p className="mt-0.5 text-sm text-neutral-500">{broker.company}</p> : null}
               {d.bio ? <p className="mt-2 max-w-2xl text-sm text-neutral-600">{d.bio}</p> : null}
-
-              <dl className="mt-4 grid grid-cols-2 gap-x-8 gap-y-3 text-sm sm:grid-cols-3 lg:grid-cols-4">
-                <Meta label="Teléfono">
-                  {broker.phone ? (
-                    <a href={waHref(broker.phone)} target="_blank" rel="noreferrer" className="tabular-nums text-brand hover:underline">
-                      {fmtPhone(broker.phone)}
-                    </a>
-                  ) : "—"}
-                  {d.whatsapp_opt_in ? <span className="ml-1.5 rounded-md bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700">acepta WhatsApp</span> : null}
-                </Meta>
-                <Meta label="Email">{d.email ? <a href={`mailto:${d.email}`} title={d.email} className="text-neutral-800 hover:text-brand">{d.email}</a> : "—"}</Meta>
-                <Meta label="Estados">{broker.states.length ? broker.states.join(", ") : "—"}</Meta>
-                <Meta label="Zonas">{d.zonas.length ? d.zonas.join(", ") : "—"}</Meta>
-                <Meta label="Miembro desde">{fmtDate(broker.created_at)}</Meta>
-                <Meta label="Última actividad">
-                  <span className="inline-flex items-center gap-1.5">
-                    <span className={`h-1.5 w-1.5 rounded-full ${act.fresh ? "bg-emerald-500" : "bg-neutral-300"}`} />
-                    {act.label}
-                  </span>
-                </Meta>
-                <Meta label="Último inicio de sesión">{d.last_sign_in_at ? fmtStamp(d.last_sign_in_at) : "—"}</Meta>
-                <Meta label="App">{d.platforms.length ? d.platforms.map((p) => (p === "ios" ? "iPhone" : p === "android" ? "Android" : p)).join(" y ") : "Sin notificaciones registradas"}</Meta>
-                {d.instagram ? (
-                  <Meta label="Instagram">
-                    <a href={`https://instagram.com/${d.instagram.replace(/^@/, "")}`} target="_blank" rel="noreferrer" className="text-brand hover:underline">@{d.instagram.replace(/^@/, "")}</a>
-                  </Meta>
-                ) : null}
-                {d.facebook ? (
-                  <Meta label="Facebook">
-                    <a href={d.facebook.startsWith("http") ? d.facebook : `https://facebook.com/${d.facebook}`} target="_blank" rel="noreferrer" className="truncate text-brand hover:underline">{d.facebook}</a>
-                  </Meta>
-                ) : null}
-                {details.filter((x) => !(d.profile_type === "otros" && x.key === "giro")).map((x) => (
-                  <Meta key={x.key} label={x.label}>
-                    {x.href ? <a href={x.href} target="_blank" rel="noreferrer" className="text-brand hover:underline">{x.value}</a> : x.value}
-                  </Meta>
-                ))}
-              </dl>
             </div>
-            <div className="flex shrink-0 flex-col items-end gap-3">
+            <div className="order-last flex shrink-0 basis-full flex-row flex-wrap items-center gap-3 sm:order-none sm:basis-auto sm:flex-col sm:items-end">
               <BlockButton id={broker.id} name={broker.name} blocked={broker.blocked} size="md" />
               {d.plan_active ? (
                 <a href="#plan" className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800 ring-1 ring-inset ring-amber-200">
@@ -426,6 +429,46 @@ export default async function BrokerPage({ params }: { params: Promise<{ id: str
                 </a>
               ) : null}
             </div>
+            {/* Phones (2026-10-13 mobile check): the details get the full width
+                under photo + name — beside them they squeezed to «+52 …». From
+                sm up they line up under the name again (64px photo + 20px gap). */}
+            <dl className="grid basis-full grid-cols-2 gap-x-8 gap-y-3 text-sm sm:grid-cols-3 sm:pl-[84px] lg:grid-cols-4">
+              <Meta label="Teléfono">
+                {broker.phone ? (
+                  <a href={waHref(broker.phone)} target="_blank" rel="noreferrer" className="tabular-nums text-brand hover:underline">
+                    {fmtPhone(broker.phone)}
+                  </a>
+                ) : "—"}
+                {d.whatsapp_opt_in ? <span className="ml-1.5 rounded-md bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700">acepta WhatsApp</span> : null}
+              </Meta>
+              <Meta label="Email">{d.email ? <a href={`mailto:${d.email}`} title={d.email} className="text-neutral-800 hover:text-brand">{d.email}</a> : "—"}</Meta>
+              <Meta label="Estados">{broker.states.length ? broker.states.join(", ") : "—"}</Meta>
+              <Meta label="Zonas">{d.zonas.length ? d.zonas.join(", ") : "—"}</Meta>
+              <Meta label="Miembro desde">{fmtDate(broker.created_at)}</Meta>
+              <Meta label="Última actividad">
+                <span className="inline-flex items-center gap-1.5">
+                  <span className={`h-1.5 w-1.5 rounded-full ${act.fresh ? "bg-emerald-500" : "bg-neutral-300"}`} />
+                  {act.label}
+                </span>
+              </Meta>
+              <Meta label="Último inicio de sesión">{d.last_sign_in_at ? fmtStamp(d.last_sign_in_at) : "—"}</Meta>
+              <Meta label="App">{d.platforms.length ? d.platforms.map((p) => (p === "ios" ? "iPhone" : p === "android" ? "Android" : p)).join(" y ") : "Sin notificaciones registradas"}</Meta>
+              {d.instagram ? (
+                <Meta label="Instagram">
+                  <a href={`https://instagram.com/${d.instagram.replace(/^@/, "")}`} target="_blank" rel="noreferrer" className="text-brand hover:underline">@{d.instagram.replace(/^@/, "")}</a>
+                </Meta>
+              ) : null}
+              {d.facebook ? (
+                <Meta label="Facebook">
+                  <a href={d.facebook.startsWith("http") ? d.facebook : `https://facebook.com/${d.facebook}`} target="_blank" rel="noreferrer" className="truncate text-brand hover:underline">{d.facebook}</a>
+                </Meta>
+              ) : null}
+              {details.filter((x) => !(d.profile_type === "otros" && x.key === "giro")).map((x) => (
+                <Meta key={x.key} label={x.label}>
+                  {x.href ? <a href={x.href} target="_blank" rel="noreferrer" className="text-brand hover:underline">{x.value}</a> : x.value}
+                </Meta>
+              ))}
+            </dl>
           </div>
         </div>
 
@@ -498,7 +541,8 @@ export default async function BrokerPage({ params }: { params: Promise<{ id: str
 
         {d.requests.length > 0 ? (
           <Section title="Requerimientos" count={d.requests.length}>
-            <div className="overflow-x-auto rounded-2xl bg-white shadow-sm ring-1 ring-black/[0.05]">
+            <RequestCards requests={d.requests} regional={false} />
+            <div className="hidden overflow-x-auto rounded-2xl bg-white shadow-sm ring-1 ring-black/[0.05] sm:block">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-left text-xs uppercase tracking-wide text-neutral-400">

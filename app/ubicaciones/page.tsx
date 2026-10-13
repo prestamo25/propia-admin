@@ -50,8 +50,10 @@ function Row({ r }: { r: GeoReviewRow }) {
         </div>
         <GeoReviewButtons id={r.id} hasSuggestion={Boolean(hasSuggestion)} />
       </div>
+      {/* min-w-0: a long one-line address made the box as wide as the address on
+          phones (the page slid 164px sideways, 2026-10-13 mobile check). */}
       <dl className="mt-4 grid gap-3 sm:grid-cols-2">
-        <div className="rounded-xl bg-neutral-50 p-3">
+        <div className="min-w-0 rounded-xl bg-neutral-50 p-3">
           <dt className="text-[11px] font-medium uppercase tracking-wide text-neutral-500">Ahora</dt>
           <dd className="mt-1 text-sm text-neutral-800">{describe(r.current, r.current_colonia)}</dd>
           {r.current.address && (
@@ -60,7 +62,7 @@ function Row({ r }: { r: GeoReviewRow }) {
             </dd>
           )}
         </div>
-        <div className="rounded-xl bg-blue-50/60 p-3">
+        <div className="min-w-0 rounded-xl bg-blue-50/60 p-3">
           <dt className="text-[11px] font-medium uppercase tracking-wide text-blue-700">Sugerida</dt>
           <dd className="mt-1 text-sm text-neutral-800">
             {hasSuggestion ? describe(r.suggested, r.suggested_colonia) : "Sin sugerencia: sólo decide si se queda"}

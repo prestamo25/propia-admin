@@ -1,8 +1,6 @@
-"use client";
-
-import { useMemo, useState } from "react";
+import Link from "next/link";
 import { relative } from "@/lib/format";
-import type { Capture } from "@/lib/bot";
+import { CAPTURES_PAGE, type Capture, type RegionStat } from "@/lib/bot";
 
 const TYPE_LABELS: Record<string, string> = {
   casa: "Casa",
@@ -17,42 +15,64 @@ const TYPE_LABELS: Record<string, string> = {
 const money = (p: number | null, c: string | null) =>
   p == null ? null : `$${p.toLocaleString("en-US")}${c ? ` ${c}` : ""}`;
 
-export function CapturesList({ captures }: { captures: Capture[] }) {
-  const [region, setRegion] = useState<string>("all");
+const hrefFor = (region: string | null, n?: number) => {
+  const q = new URLSearchParams();
+  if (region) q.set("region", region);
+  if (n && n > CAPTURES_PAGE) q.set("n", String(n));
+  const s = q.toString();
+  return `/whatsapp${s ? `?${s}` : ""}`;
+};
 
-  const regions = useMemo(() => {
-    const m = new Map<string, number>();
-    for (const c of captures) m.set(c.region, (m.get(c.region) ?? 0) + 1);
-    return [...m.entries()].sort((a, b) => b[1] - a[1]);
-  }, [captures]);
-
-  const rows = useMemo(
-    () => (region === "all" ? captures : captures.filter((c) => c.region === region)),
-    [captures, region],
-  );
-
+// Server-rendered (2026-10-13): the region chips and «Mostrar más» are links,
+// so the server sends only the captures on screen instead of every capture
+// the bot has (see lib/bot.ts).
+export function CapturesList({
+  captures,
+  regions,
+  total,
+  region,
+  matching,
+}: {
+  captures: Capture[];
+  regions: RegionStat[];
+  total: number;
+  region: string | null;
+  matching: number;
+}) {
+  const more = matching - captures.length;
   return (
     <div>
       {regions.length > 1 ? (
         <div className="mb-4 flex flex-wrap items-center gap-1 rounded-xl bg-neutral-200/40 p-1">
-          <Chip label="Todas" count={captures.length} active={region === "all"} onClick={() => setRegion("all")} />
-          {regions.map(([r, n]) => (
-            <Chip key={r} label={r} count={n} active={region === r} onClick={() => setRegion(r)} />
+          <Chip label="Todas" count={total} active={!region} href={hrefFor(null)} />
+          {regions.map((r) => (
+            <Chip key={r.region} label={r.region} count={r.total} active={region === r.region} href={hrefFor(r.region)} />
           ))}
         </div>
       ) : null}
 
-      {rows.length === 0 ? (
+      {captures.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-neutral-200 bg-white/50 py-16 text-center text-sm text-neutral-400">
           Sin capturas en esta región.
         </div>
       ) : (
         <div className="space-y-3">
-          {rows.map((c) => (
+          {captures.map((c) => (
             <CaptureCard key={c.id} c={c} />
           ))}
         </div>
       )}
+      {more > 0 ? (
+        <div className="mt-4 flex justify-center">
+          <Link
+            href={hrefFor(region, captures.length + CAPTURES_PAGE)}
+            scroll={false}
+            className="rounded-lg px-4 py-2 text-sm font-medium text-neutral-600 ring-1 ring-neutral-200 transition hover:bg-white hover:text-neutral-900"
+          >
+            Mostrar {Math.min(more, CAPTURES_PAGE)} más · faltan {more.toLocaleString("en-US")}
+          </Link>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -61,16 +81,17 @@ function Chip({
   label,
   count,
   active,
-  onClick,
+  href,
 }: {
   label: string;
   count: number;
   active: boolean;
-  onClick: () => void;
+  href: string;
 }) {
   return (
-    <button
-      onClick={onClick}
+    <Link
+      href={href}
+      scroll={false}
       className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition ${
         active
           ? "bg-white text-neutral-900 shadow-sm ring-1 ring-black/[0.04]"
@@ -81,7 +102,7 @@ function Chip({
       <span className="rounded-full bg-neutral-100 px-1.5 text-xs tabular-nums text-neutral-500">
         {count}
       </span>
-    </button>
+    </Link>
   );
 }
 

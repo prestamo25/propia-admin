@@ -1,4 +1,4 @@
-import { fetchBotMonitor, type BotMonitor } from "@/lib/bot";
+import { CAPTURES_PAGE, fetchBotMonitor, type BotMonitor } from "@/lib/bot";
 import { TopNav } from "@/components/TopNav";
 import { CapturesList } from "@/components/CapturesList";
 import { requireRole } from "@/lib/session";
@@ -8,12 +8,20 @@ export const dynamic = "force-dynamic";
 
 const DAY = 86400000;
 
-export default async function WhatsAppPage() {
+export default async function WhatsAppPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ region?: string; n?: string }>;
+}) {
   await requireRole("dev"); // técnico only
+  const sp = await searchParams;
+  const region = sp.region?.trim() || null;
+  // ?n= grows by CAPTURES_PAGE with «Mostrar más»; capped by the SQL at 2,000.
+  const n = Math.max(CAPTURES_PAGE, Math.min(2000, Number(sp.n) || CAPTURES_PAGE));
 
   let data: BotMonitor;
   try {
-    data = await fetchBotMonitor();
+    data = await fetchBotMonitor(region, n);
   } catch (e) {
     return (
       <div className="min-h-screen">
@@ -28,7 +36,7 @@ export default async function WhatsAppPage() {
     );
   }
 
-  const { captures, byRegion, kpis, lastCapturedAt } = data;
+  const { captures, byRegion, kpis, lastCapturedAt, matching } = data;
   // Server component on a force-dynamic route: freshness is measured at
   // request time, so reading the clock during render is the point. The purity
   // rule is written for client components and flags this legitimately-impure
@@ -122,8 +130,18 @@ export default async function WhatsAppPage() {
 
         <h2 className="mb-4 text-base font-semibold tracking-tight text-neutral-900">
           Capturas recientes
+          <span className="ml-2 text-sm font-normal tabular-nums text-neutral-400">
+            {captures.length.toLocaleString("en-US")} de {matching.toLocaleString("en-US")}
+            {region ? ` · ${region}` : ""}
+          </span>
         </h2>
-        <CapturesList captures={captures} />
+        <CapturesList
+          captures={captures}
+          regions={byRegion}
+          total={kpis.total}
+          region={region}
+          matching={matching}
+        />
       </main>
     </div>
   );

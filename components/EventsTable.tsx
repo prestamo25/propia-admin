@@ -124,7 +124,58 @@ export function EventsTable({ events }: { events: EventRow[] }) {
           {rows.length === 0 ? (
             <p className="p-8 text-center text-sm text-neutral-500">Sin eventos con estos filtros.</p>
           ) : (
-        <div className="overflow-x-auto rounded-2xl">
+        <>
+        {/* Phones (2026-10-13 mobile check): one card per event — the 7-column
+            table showed only the date and a clipped title. Table from md up. */}
+        <ul className="divide-y divide-black/[0.04] md:hidden">
+          {rows.map((e) => {
+            const c = e.counts;
+            const rate = c.registered > 0 ? Math.round((c.attended / c.registered) * 100) : null;
+            return (
+              <li key={e.id}>
+                <Link href={`/eventos/${e.id}`} className="block px-4 py-3 active:bg-neutral-50">
+                  <div className="text-xs tabular-nums text-neutral-500">{fmtWhen(e.start_at, e.end_at)}</div>
+                  <div className="mt-0.5 line-clamp-2 font-medium text-neutral-900">{e.title}</div>
+                  <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px]">
+                    <span className="rounded-md bg-indigo-50 px-1.5 py-0.5 font-semibold text-indigo-700 ring-1 ring-indigo-600/10">
+                      {EVENT_TYPE_LABEL[e.type] ?? e.type}
+                    </span>
+                    <span className="rounded-md bg-neutral-100 px-1.5 py-0.5 font-medium text-neutral-500">
+                      {MODALITY_LABEL[e.modality] ?? e.modality}
+                    </span>
+                    {e.visibility === "private" ? (
+                      <span className="rounded-md bg-amber-50 px-1.5 py-0.5 font-semibold text-amber-700 ring-1 ring-amber-600/10">Privado</span>
+                    ) : null}
+                    {e.is_paid ? (
+                      <span className="rounded-md bg-emerald-50 px-1.5 py-0.5 font-semibold text-emerald-700 ring-1 ring-emerald-600/10">
+                        {e.price != null ? `$${e.price.toLocaleString("en-US")}` : "De pago"}
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="mt-1.5 truncate text-xs text-neutral-500">
+                    {[e.organizer?.name, e.modality === "online" ? "En línea" : (e.state ?? e.location)].filter(Boolean).join(" · ") || "—"}
+                  </div>
+                  <div className="mt-1 flex flex-wrap gap-x-3 text-xs tabular-nums text-neutral-500">
+                    <span>
+                      <b className="font-semibold text-neutral-800">{c.registered}</b>
+                      {e.capacity ? ` / ${e.capacity}` : ""} inscritos
+                    </span>
+                    <span>
+                      <b className={c.attended > 0 ? "font-semibold text-emerald-700" : "font-semibold text-neutral-400"}>{c.attended}</b> asistieron
+                      {rate != null ? ` · ${rate}%` : ""}
+                    </span>
+                    {c.pending > 0 ? (
+                      <span>
+                        <b className="font-semibold text-amber-700">{c.pending}</b> pendientes
+                      </span>
+                    ) : null}
+                  </div>
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+        <div className="hidden overflow-x-auto rounded-2xl md:block">
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-xs uppercase tracking-wide text-neutral-400">
@@ -200,6 +251,7 @@ export function EventsTable({ events }: { events: EventRow[] }) {
             </tbody>
           </table>
         </div>
+        </>
           )}
         </section>
       </main>
