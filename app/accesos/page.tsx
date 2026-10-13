@@ -38,7 +38,7 @@ function eventLabel(e: AccessEvent): string {
   const rol = typeof d.rol === "string" && d.rol in ROL_LABEL ? ROL_LABEL[d.rol as keyof typeof ROL_LABEL] : null;
   switch (e.evento) {
     case "login":
-      return d.primera ? "Entró por primera vez" : "Entró";
+      return d.primera ? "Entró por primera vez" : d.dispositivo ? "Entró (dispositivo de confianza)" : "Entró";
     case "login_fallido":
       return d.motivo === "pin"
         ? "PIN incorrecto"
@@ -126,7 +126,17 @@ function Bitacora({ eventos }: { eventos: AccessEvent[] }) {
   );
 }
 
-function TeamCard({ a, eventos, isOwner }: { a: AccessRow; eventos: AccessEvent[]; isOwner: boolean }) {
+function TeamCard({
+  a,
+  eventos,
+  isOwner,
+  dispositivos = 0,
+}: {
+  a: AccessRow;
+  eventos: AccessEvent[];
+  isOwner: boolean;
+  dispositivos?: number;
+}) {
   const seen = a.last_seen_at ? relative(a.last_seen_at) : null;
   return (
     <li className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/[0.05]">
@@ -140,7 +150,7 @@ function TeamCard({ a, eventos, isOwner }: { a: AccessRow; eventos: AccessEvent[
           </div>
         ) : null}
       </div>
-      <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-1.5 text-sm sm:grid-cols-3">
+      <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-1.5 text-sm sm:grid-cols-4">
         <div>
           <dt className="text-xs text-neutral-400">Con su teléfono</dt>
           <dd className={a.last_login_at ? "text-emerald-700" : "text-amber-700"}>
@@ -150,6 +160,12 @@ function TeamCard({ a, eventos, isOwner }: { a: AccessRow; eventos: AccessEvent[
         <div>
           <dt className="text-xs text-neutral-400">Última vez</dt>
           <dd className="text-neutral-800" suppressHydrationWarning>{seen ? seen.label : "—"}</dd>
+        </div>
+        <div>
+          <dt className="text-xs text-neutral-400" title="Navegadores donde ya pasó el código de WhatsApp: ahí entra sólo con su PIN (90 días). «Cerrar sesiones» los olvida.">
+            Dispositivos de confianza
+          </dt>
+          <dd className="tabular-nums text-neutral-800">{dispositivos}</dd>
         </div>
         <div>
           <dt className="text-xs text-neutral-400">Desde</dt>
@@ -226,7 +242,7 @@ export default async function AccesosPage() {
   if (role !== "admin" && role !== "dev") redirect("/");
   const isOwner = role === "dev";
 
-  const { accesos, eventos, fallidos, bloqueados, contrasena } = await fetchAccesos();
+  const { accesos, eventos, fallidos, bloqueados, contrasena, dispositivos } = await fetchAccesos();
   const byAccess = new Map<string, AccessEvent[]>();
   for (const e of eventos) {
     if (!e.access_id) continue;
@@ -270,7 +286,13 @@ export default async function AccesosPage() {
           <SectionTitle title="Equipo" n={equipo.length} />
           <ul className="space-y-3">
             {equipo.map((a) => (
-              <TeamCard key={a.id} a={a} eventos={byAccess.get(a.id) ?? []} isOwner={isOwner} />
+              <TeamCard
+                key={a.id}
+                a={a}
+                eventos={byAccess.get(a.id) ?? []}
+                isOwner={isOwner}
+                dispositivos={dispositivos.get(a.id) ?? 0}
+              />
             ))}
           </ul>
           {isOwner ? (

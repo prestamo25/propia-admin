@@ -83,11 +83,13 @@ export async function fetchAccesos(): Promise<{
   bloqueados: Locked[];
   // Logins with a team password (fase 2: the emergency one), last 30 days.
   contrasena: AccessEvent[];
+  // Live trusted devices per access id (team login, 2026-10-13).
+  dispositivos: Map<string, number>;
 }> {
   const sb = supabaseAdmin();
   const weekAgo = new Date(Date.now() - 7 * 86_400_000).toISOString();
   const monthAgo = new Date(Date.now() - 30 * 86_400_000).toISOString();
-  const [a, e, f, l, c] = await Promise.all([
+  const [a, e, f, l, c, d] = await Promise.all([
     sb.from("admin_access").select(SELECT).order("created_at", { ascending: false }),
     sb
       .from("admin_access_log")
@@ -112,7 +114,16 @@ export async function fetchAccesos(): Promise<{
       .gte("at", monthAgo)
       .order("at", { ascending: false })
       .limit(50),
+    sb
+      .from("admin_trusted_device")
+      .select("access_id")
+      .is("revoked_at", null)
+      .gt("expires_at", new Date().toISOString()),
   ]);
+  const dispositivos = new Map<string, number>();
+  for (const row of (d.data ?? []) as { access_id: string }[]) {
+    dispositivos.set(row.access_id, (dispositivos.get(row.access_id) ?? 0) + 1);
+  }
   if (a.error) throw new Error(a.error.message);
   if (e.error) throw new Error(e.error.message);
   if (f.error) throw new Error(f.error.message);
@@ -122,6 +133,7 @@ export async function fetchAccesos(): Promise<{
     fallidos: (f.data ?? []) as AccessEvent[],
     bloqueados: (l.data ?? []) as Locked[],
     contrasena: (c.data ?? []) as AccessEvent[],
+    dispositivos,
   };
 }
 

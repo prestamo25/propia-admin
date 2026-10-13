@@ -153,7 +153,8 @@ export default async function LoginPage({
                   </button>
                 </form>
                 <p className="mt-4 text-xs leading-relaxed text-neutral-400">
-                  Puede tardar hasta un minuto en llegar.
+                  Puede tardar hasta un minuto en llegar. Después, este navegador queda como de
+                  confianza por 90 días: aquí sólo te pediremos tu PIN.
                 </p>
                 <div className="mt-5 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-sm">
                   <form action="/api/login/codigo" method="post">
@@ -236,8 +237,9 @@ export default async function LoginPage({
                 Entrar
               </button>
               <p className="mt-4 text-xs leading-relaxed text-neutral-400">
-                Es el mismo PIN con el que entras a la app. Si no lo recuerdas, cámbialo desde la
-                app con «Olvidé mi PIN».
+                Es el mismo PIN con el que entras a la app. ¿Lo olvidaste? En la app de Propia toca
+                «Olvidé mi PIN»: te llega un código por WhatsApp, creas uno nuevo y aquí entras con
+                ese.
               </p>
               <a href="/login?modo=contrasena" className={`mt-6 block text-center text-xs ${LINK}`}>
                 {emergencia ? "Acceso de emergencia" : "Entrar con contraseña del equipo"}

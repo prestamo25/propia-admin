@@ -19,6 +19,12 @@ export const SESSION_COOKIE = "padmin";
 // Between the PIN and the WhatsApp code (team only): who passed the PIN, for
 // 10 minutes. Never a session by itself.
 export const PENDING_COOKIE = "padmin_codigo";
+// Trusted device (2026-10-13): after a WhatsApp code, this browser is
+// remembered for 90 days and the team signs in there with the PIN alone.
+// "<device id>.<random token>"; the database keeps only the token's sha256.
+// Scoped to /api/login — no other request ever carries it.
+export const DEVICE_COOKIE = "padmin_dispositivo";
+export const DEVICE_PATH = "/api/login";
 
 export type Role = "admin" | "mariana" | "dev";
 const ROLES: Role[] = ["admin", "mariana", "dev"];
@@ -61,6 +67,7 @@ export function roleCan(role: Role, needs: Role): boolean {
 export const STAFF_MAX_AGE = 60 * 60 * 24 * 30;
 export const REGIONAL_MAX_AGE = 60 * 60 * 24 * 14;
 export const PENDING_MAX_AGE = 60 * 10;
+export const DEVICE_MAX_AGE = 60 * 60 * 24 * 90;
 
 const encoder = new TextEncoder();
 

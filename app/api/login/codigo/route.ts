@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import {
+  DEVICE_COOKIE,
+  DEVICE_MAX_AGE,
+  DEVICE_PATH,
   PENDING_COOKIE,
   SESSION_COOKIE,
   STAFF_MAX_AGE,
@@ -9,10 +12,12 @@ import {
 } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { checkCode, sendCode, type Canal } from "@/lib/verify";
+import { trustDevice } from "@/lib/devices";
 
 // Step 2 of the team login (2026-10-13): the WhatsApp code. Only reachable
 // with the 10-minute cookie /api/login sets after a correct PIN. A wrong code
-// counts toward the same lockout as a wrong PIN (5 in 15 min).
+// counts toward the same lockout as a wrong PIN (5 in 15 min). A right code
+// also makes this browser a trusted device for 90 days (PIN-only there).
 
 const back = (location: string, clearPending = false) => {
   const res = new NextResponse(null, { status: 303, headers: { Location: location } });
@@ -71,12 +76,17 @@ export async function POST(req: Request) {
   if (!d) return back("/login?error=vencido", true);
   const token = await createPersonaToken(true, d.id, d.version, secret);
   const res = back("/", true);
-  res.cookies.set(SESSION_COOKIE, token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
-    maxAge: STAFF_MAX_AGE,
-  });
+  const secure = process.env.NODE_ENV === "production";
+  res.cookies.set(SESSION_COOKIE, token, { httpOnly: true, secure, sameSite: "lax", path: "/", maxAge: STAFF_MAX_AGE });
+  const device = await trustDevice(d.id, req.headers.get("user-agent"));
+  if (device) {
+    res.cookies.set(DEVICE_COOKIE, device, {
+      httpOnly: true,
+      secure,
+      sameSite: "lax",
+      path: DEVICE_PATH,
+      maxAge: DEVICE_MAX_AGE,
+    });
+  }
   return res;
 }

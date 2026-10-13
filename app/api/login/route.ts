@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import {
+  DEVICE_COOKIE,
   PASSWORD_ROLES,
   PENDING_COOKIE,
   PENDING_MAX_AGE,
@@ -13,6 +15,7 @@ import {
 } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { sendCode } from "@/lib/verify";
+import { deviceTrusted } from "@/lib/devices";
 
 // Relative Location: behind Lambda Web Adapter the request host is the
 // adapter's local address, so absolute URLs built from req.url are wrong.
@@ -41,7 +44,9 @@ export async function POST(req: Request) {
   // an account without panel access ⇒ «sin_privilegios» (only someone who just
   // proved the account is theirs ever sees that). A regional viewer is in; the
   // team gets a WhatsApp code first
-  // (/api/login/codigo), with only a 10-minute «passed the PIN» cookie meanwhile.
+  // (/api/login/codigo), with only a 10-minute «passed the PIN» cookie meanwhile
+  // — unless this browser is one of their trusted devices (a code here in the
+  // last 90 days), where the PIN is enough.
   if (form.has("phone")) {
     const { data, error } = await sb.rpc("admin_access_login", {
       p_phone: String(form.get("phone") ?? ""),
@@ -55,6 +60,19 @@ export async function POST(req: Request) {
     if (r.rol === "regional") {
       const token = await createPersonaToken(false, r.id, r.version, secret);
       return withCookie(back("/regional"), SESSION_COOKIE, token, REGIONAL_MAX_AGE);
+    }
+    const jar = await cookies();
+    if (await deviceTrusted(r.id, jar.get(DEVICE_COOKIE)?.value)) {
+      const { data: done } = await sb.rpc("admin_access_login_complete", {
+        p_id: r.id,
+        p_version: r.version,
+        p_dispositivo: true,
+      });
+      const d = done as { id: string; version: number } | null;
+      if (d) {
+        const token = await createPersonaToken(true, d.id, d.version, secret);
+        return withCookie(back("/"), SESSION_COOKIE, token, STAFF_MAX_AGE);
+      }
     }
     const sent = await sendCode(r.phone, "whatsapp");
     await sb.rpc("admin_access_code_event", {

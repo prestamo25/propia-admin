@@ -55,7 +55,7 @@ export function CloseSessionsButton({ id }: { id: string }) {
         type="button"
         disabled={pending || done}
         onClick={() => run(() => closeSessions(id), () => setDone(true))}
-        title="Saca a esta persona de todas las computadoras donde tenga sesión abierta"
+        title="Saca a esta persona de todas las computadoras donde tenga sesión abierta y olvida sus dispositivos de confianza (la próxima vez le pedirá el código de WhatsApp)"
         className={`${SMALL} text-neutral-600 ring-neutral-200 hover:bg-neutral-50`}
       >
         {done ? "Sesiones cerradas" : "Cerrar sesiones"}

@@ -75,133 +75,35 @@ function isBanned(bannedUntil: string | null | undefined): boolean {
 }
 
 export async function fetchOverview(): Promise<Overview> {
-  const sb = supabaseAdmin();
-
-  // Every list here is a FULL-table read → paged (pageAll), or PostgREST's
-  // 1,000-row cap silently truncates: the overview froze at "1000 Propiedades"
-  // and per-broker inventory counts went quietly wrong (2026-08-17).
-  const [userRows, propRows, reqRows, connRows, attRows, sendRows, openRows, tokenRows, authUsers] = await Promise.all([
-    pageAll<Record<string, unknown>>(() =>
-      sb
-        .from("users")
-        .select(
-          "id, name, first_name, last_name, company, phone, email, states, status, created_at, last_active, avatar_url, whatsapp_opt_in, profile_type, plan, plan_expires_at, plan_source",
-        )
-        .order("created_at", { ascending: false }),
-    ),
-    pageAll<{ user_id: string }>(() => sb.from("properties").select("user_id")),
-    pageAll<{ created_by: string }>(() => sb.from("search_requests").select("created_by").eq("status", "open")),
-    pageAll<{ requester_id: string; recipient_id: string }>(() =>
-      sb.from("connections").select("requester_id, recipient_id").eq("status", "accepted"),
-    ),
-    pageAll<{ user_id: string }>(() => sb.from("event_attendees").select("user_id").eq("status", "attended")),
-    pageAll<{ sharer_id: string }>(() => sb.from("share_events").select("sharer_id")),
-    pageAll<{ sharer_id: string | null }>(() => sb.from("share_views").select("sharer_id")),
-    pageAll<{ user_id: string; platform: string | null }>(() => sb.from("push_tokens").select("user_id, platform")),
-    // Ban state lives in the auth schema, reachable only via the admin API —
-    // its own pagination (page/perPage), same silent-truncation rule.
-    (async () => {
-      const users: { id: string; banned_until?: string | null }[] = [];
-      for (let page = 1; ; page++) {
-        const res = await sb.auth.admin.listUsers({ page, perPage: 1000 });
-        if (res.error) throw res.error;
-        users.push(...(res.data.users as typeof users));
-        if (res.data.users.length < 1000) return users;
-      }
-    })(),
-  ]);
-
-  const counts = new Map<string, number>();
-  for (const p of propRows) {
-    counts.set(p.user_id, (counts.get(p.user_id) ?? 0) + 1);
-  }
-  const tally = (rows: { key: string | null }[]) => {
-    const m = new Map<string, number>();
-    for (const r of rows) if (r.key) m.set(r.key, (m.get(r.key) ?? 0) + 1);
-    return m;
+  // One query (admin_members_overview, admin-members-overview-2026-10-13.sql):
+  // the database counts listings, open requerimientos, accepted contacts,
+  // events attended, fichas sent and their opens, push platforms and the ban
+  // state per member, and returns them as one jsonb — ~80 ms. Until 2026-10-13
+  // this read nine whole tables page by page on every visit (~2.5 s).
+  const { data, error } = await supabaseAdmin().rpc("admin_members_overview");
+  if (error) throw new Error(error.message);
+  type Row = Omit<BrokerRow, "premium" | "comped" | "mb_used"> & {
+    plan: string | null;
   };
-  const requests = tally(reqRows.map((r) => ({ key: r.created_by })));
-  const contacts = tally(connRows.flatMap((c) => [{ key: c.requester_id }, { key: c.recipient_id }]));
-  const attended = tally(attRows.map((r) => ({ key: r.user_id })));
-  const sends = tally(sendRows.map((r) => ({ key: r.sharer_id })));
-  const opens = tally(openRows.map((r) => ({ key: r.sharer_id })));
-  const platforms = new Map<string, Set<string>>();
-  for (const t of tokenRows) {
-    if (!t.platform) continue;
-    if (!platforms.has(t.user_id)) platforms.set(t.user_id, new Set());
-    platforms.get(t.user_id)!.add(t.platform);
-  }
-
-  const banned = new Map<string, boolean>();
-  for (const u of authUsers) {
-    banned.set(u.id, isBanned(u.banned_until));
-  }
-
-  const brokers: BrokerRow[] = userRows.map((u) => {
-    const row = u as {
-      id: string;
-      name: string | null;
-      first_name: string | null;
-      last_name: string | null;
-      company: string | null;
-      phone: string | null;
-      email: string | null;
-      states: string[] | null;
-      status: string | null;
-      created_at: string | null;
-      last_active: string | null;
-      avatar_url: string | null;
-      whatsapp_opt_in: boolean | null;
-      profile_type: string | null;
-      plan?: string | null;
-      plan_expires_at?: string | null;
-      plan_source?: string | null;
-    };
-    const full =
-      [row.first_name, row.last_name].filter(Boolean).join(" ").trim() ||
-      row.name ||
-      null;
+  const brokers: BrokerRow[] = ((data ?? []) as Row[]).map(({ plan, ...row }) => {
+    const active = activePlan({ plan, plan_expires_at: row.plan_expires_at });
     return {
-      id: row.id,
-      name: full,
-      company: row.company,
-      phone: row.phone,
-      email: row.email,
-      states: row.states ?? [],
-      status: row.status,
-      created_at: row.created_at,
-      last_active: row.last_active,
-      avatar_url: row.avatar_url,
-      whatsapp_opt_in: Boolean(row.whatsapp_opt_in),
-      inventory: counts.get(row.id) ?? 0,
-      mb_used: null,
-      blocked: banned.get(row.id) ?? false,
+      ...row,
       profile_type: row.profile_type ?? "asesor",
-      premium: activePlan(row) && PAID_SOURCES.has(row.plan_source ?? ""),
-      comped: activePlan(row) && !PAID_SOURCES.has(row.plan_source ?? ""),
-      plan_source: row.plan_source ?? null,
-      plan_expires_at: row.plan_expires_at ?? null,
-      requests: requests.get(row.id) ?? 0,
-      contacts: contacts.get(row.id) ?? 0,
-      events_attended: attended.get(row.id) ?? 0,
-      sends: sends.get(row.id) ?? 0,
-      opens: opens.get(row.id) ?? 0,
-      platforms: [...(platforms.get(row.id) ?? [])].sort(),
+      mb_used: null,
+      premium: active && PAID_SOURCES.has(row.plan_source ?? ""),
+      comped: active && !PAID_SOURCES.has(row.plan_source ?? ""),
     };
   });
-
-  const approved = brokers.filter((b) => b.status === "approved").length;
-  const pending = brokers.filter((b) => b.status === "pending").length;
-  const blocked = brokers.filter((b) => b.blocked).length;
 
   return {
     brokers,
     totals: {
       brokers: brokers.length,
-      approved,
-      pending,
-      properties: propRows.length,
-      blocked,
+      approved: brokers.filter((b) => b.status === "approved").length,
+      pending: brokers.filter((b) => b.status === "pending").length,
+      properties: brokers.reduce((n, b) => n + b.inventory, 0),
+      blocked: brokers.filter((b) => b.blocked).length,
     },
   };
 }
