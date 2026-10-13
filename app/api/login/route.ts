@@ -36,9 +36,11 @@ export async function POST(req: Request) {
   const sb = supabaseAdmin();
 
   // Phone + app PIN (2026-10-13) — everyone. admin_access_login() checks the
-  // PIN against the member's Supabase Auth hash, enforces the 5-tries lockout
-  // and answers the same «credenciales» whether the phone has no access or the
-  // PIN is wrong. A regional viewer is in; the team gets a WhatsApp code first
+  // PIN against the member's Supabase Auth hash and enforces the 5-tries
+  // lockout. Wrong PIN or no Propia account ⇒ «credenciales»; the right PIN on
+  // an account without panel access ⇒ «sin_privilegios» (only someone who just
+  // proved the account is theirs ever sees that). A regional viewer is in; the
+  // team gets a WhatsApp code first
   // (/api/login/codigo), with only a 10-minute «passed the PIN» cookie meanwhile.
   if (form.has("phone")) {
     const { data, error } = await sb.rpc("admin_access_login", {
@@ -47,7 +49,8 @@ export async function POST(req: Request) {
     });
     const r = (data ?? {}) as { id?: string; version?: number; rol?: string; phone?: string; error?: string };
     if (error || !r.id || !r.version || !r.phone) {
-      return back(`/login?error=${r.error === "bloqueado" ? "bloqueado" : "1"}`);
+      const why = r.error === "bloqueado" ? "bloqueado" : r.error === "sin_privilegios" ? "sin-privilegios" : "1";
+      return back(`/login?error=${why}`);
     }
     if (r.rol === "regional") {
       const token = await createPersonaToken(false, r.id, r.version, secret);

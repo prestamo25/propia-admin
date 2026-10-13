@@ -40,7 +40,13 @@ function eventLabel(e: AccessEvent): string {
     case "login":
       return d.primera ? "Entró por primera vez" : "Entró";
     case "login_fallido":
-      return d.motivo === "pin" ? "PIN incorrecto" : "Intento sin acceso";
+      return d.motivo === "pin"
+        ? "PIN incorrecto"
+        : d.motivo === "sin_privilegios"
+          ? "PIN correcto, pero sin acceso al panel"
+          : d.motivo === "sin_cuenta"
+            ? "Teléfono sin cuenta de Propia"
+            : "Intento sin acceso";
     case "bloqueado":
       return "Bloqueado 15 min por intentos fallidos";
     case "ver_miembro":

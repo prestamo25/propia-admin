@@ -14,7 +14,8 @@ const LINK = "font-medium text-neutral-500 transition hover:text-neutral-800";
 // while they last (fase 2: Franz's emergency password only). Plain forms and
 // links, no client JS.
 const ERRORS: Record<string, string> = {
-  "1": "Número o PIN incorrectos, o este número no tiene acceso al panel.",
+  "1": "Número o PIN incorrectos.",
+  "sin-privilegios": "No tienes privilegios para acceder a este panel.",
   bloqueado: "Demasiados intentos. Espera 15 minutos y vuelve a intentarlo.",
   vencido: "Tu acceso al panel terminó o fue retirado.",
   codigo: "Ese código no es correcto. Revisa el último que te llegó.",
