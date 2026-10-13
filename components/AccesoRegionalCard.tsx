@@ -11,6 +11,7 @@ import {
   type Seccion,
 } from "@/lib/accesoShared";
 import { fmtDate, relative } from "@/lib/format";
+import { ROL_LABEL } from "@/lib/auth";
 
 // «Acceso al panel» card on /broker/[id] (acceso regional, Franz + Pablo
 // 2026-10-13): give this member read-only access to chosen sections of the
@@ -84,6 +85,25 @@ export function AccesoRegionalCard({
       if (res.error) setError(res.error);
       setConfirmRevoke(false);
     });
+  }
+
+  // Someone on the team (dueño / admin / equipo) isn't given regional access:
+  // their role lives on the Accesos page, where only the dueño changes it.
+  if (access && access.rol !== "regional") {
+    return (
+      <div className="flex flex-wrap items-center gap-3 rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/[0.05]">
+        <span className="rounded-full bg-violet-50 px-2.5 py-0.5 text-xs font-semibold text-violet-700 ring-1 ring-inset ring-violet-200">
+          Equipo · {ROL_LABEL[access.rol]}
+        </span>
+        <span className="text-sm text-neutral-500">
+          Entra al panel con su teléfono, su PIN y un código por WhatsApp. Su rol se cambia en{" "}
+          <a href="/accesos" className="text-brand hover:underline">
+            Accesos
+          </a>
+          .
+        </span>
+      </div>
+    );
   }
 
   return (

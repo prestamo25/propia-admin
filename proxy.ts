@@ -33,7 +33,8 @@ export async function proxy(req: NextRequest) {
     url.search = "";
     return NextResponse.redirect(url);
   }
-  if (session.kind === "staff") return NextResponse.next();
+  // Team (password or phone login): every page and action checks its own tier.
+  if (session.kind === "password" || session.equipo) return NextResponse.next();
 
   const path = req.nextUrl.pathname;
   const readOnly = (req.method === "GET" || req.method === "HEAD") && !req.headers.has("next-action");

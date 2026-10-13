@@ -1,21 +1,26 @@
 import { NextResponse } from "next/server";
 import {
-  SESSION_COOKIE,
+  PASSWORD_ROLES,
+  PENDING_COOKIE,
+  PENDING_MAX_AGE,
   REGIONAL_MAX_AGE,
+  SESSION_COOKIE,
   STAFF_MAX_AGE,
-  createRegionalToken,
+  createPendingToken,
+  createPersonaToken,
   createSessionToken,
   type Role,
 } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { sendCode } from "@/lib/verify";
 
 // Relative Location: behind Lambda Web Adapter the request host is the
 // adapter's local address, so absolute URLs built from req.url are wrong.
 const back = (location: string) =>
   new NextResponse(null, { status: 303, headers: { Location: location } });
 
-function withCookie(res: NextResponse, token: string, maxAge: number): NextResponse {
-  res.cookies.set(SESSION_COOKIE, token, {
+function withCookie(res: NextResponse, name: string, token: string, maxAge: number): NextResponse {
+  res.cookies.set(name, token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
@@ -28,35 +33,54 @@ function withCookie(res: NextResponse, token: string, maxAge: number): NextRespo
 export async function POST(req: Request) {
   const form = await req.formData();
   const secret = process.env.SESSION_SECRET ?? "";
+  const sb = supabaseAdmin();
 
-  // Acceso regional (2026-10-13): a Propia member with a grant signs in with
-  // their phone + app PIN. admin_access_login() checks the PIN against their
-  // Supabase Auth hash, enforces the 5-tries lockout and logs the attempt; it
-  // answers the same «credenciales» whether the phone has no grant or the PIN
-  // is wrong.
+  // Phone + app PIN (2026-10-13) — everyone. admin_access_login() checks the
+  // PIN against the member's Supabase Auth hash, enforces the 5-tries lockout
+  // and answers the same «credenciales» whether the phone has no access or the
+  // PIN is wrong. A regional viewer is in; the team gets a WhatsApp code first
+  // (/api/login/codigo), with only a 10-minute «passed the PIN» cookie meanwhile.
   if (form.has("phone")) {
-    const phone = String(form.get("phone") ?? "");
-    const pin = String(form.get("pin") ?? "");
-    const { data, error } = await supabaseAdmin().rpc("admin_access_login", {
-      p_phone: phone,
-      p_pin: pin,
+    const { data, error } = await sb.rpc("admin_access_login", {
+      p_phone: String(form.get("phone") ?? ""),
+      p_pin: String(form.get("pin") ?? ""),
     });
-    const r = (data ?? {}) as { id?: string; version?: number; error?: string };
-    if (error || !r.id || !r.version) {
-      return back(`/login?modo=propia&error=${r.error === "bloqueado" ? "bloqueado" : "1"}`);
+    const r = (data ?? {}) as { id?: string; version?: number; rol?: string; phone?: string; error?: string };
+    if (error || !r.id || !r.version || !r.phone) {
+      return back(`/login?error=${r.error === "bloqueado" ? "bloqueado" : "1"}`);
     }
-    const token = await createRegionalToken(r.id, r.version, secret);
-    return withCookie(back("/regional"), token, REGIONAL_MAX_AGE);
+    if (r.rol === "regional") {
+      const token = await createPersonaToken(false, r.id, r.version, secret);
+      return withCookie(back("/regional"), SESSION_COOKIE, token, REGIONAL_MAX_AGE);
+    }
+    const sent = await sendCode(r.phone, "whatsapp");
+    await sb.rpc("admin_access_code_event", {
+      p_id: r.id,
+      p_evento: "codigo_enviado",
+      p_detalle: sent.ok ? { canal: "whatsapp" } : { canal: "whatsapp", error: sent.error },
+    });
+    const pending = await createPendingToken(r.id, r.version, secret);
+    return withCookie(
+      back(sent.ok ? "/login?paso=codigo" : "/login?paso=codigo&error=envio"),
+      PENDING_COOKIE,
+      pending,
+      PENDING_MAX_AGE,
+    );
   }
 
+  // Team passwords — only those still in PASSWORD_ROLES (fase 2: Franz's
+  // emergency password alone). Every use is logged and reaches Telegram.
   const password = String(form.get("password") ?? "");
-  let role: Role | null = null;
-  if (password && password === process.env.ADMIN_PASSWORD) role = "admin";
-  else if (password && password === process.env.MARIANA_PASSWORD) role = "mariana";
-  else if (password && password === process.env.DEV_PASSWORD) role = "dev";
+  const byPassword: [Role, string | undefined][] = [
+    ["admin", process.env.ADMIN_PASSWORD],
+    ["mariana", process.env.MARIANA_PASSWORD],
+    ["dev", process.env.DEV_PASSWORD],
+  ];
+  const role =
+    byPassword.find(([r, pw]) => PASSWORD_ROLES.includes(r) && !!pw && password === pw)?.[0] ?? null;
+  if (!role) return back("/login?modo=contrasena&error=1");
 
-  if (!role) return back("/login?error=1");
-
+  await sb.from("admin_access_log").insert({ evento: "emergencia", detalle: { rol: role } });
   const token = await createSessionToken(role, secret);
-  return withCookie(back("/"), token, STAFF_MAX_AGE);
+  return withCookie(back("/"), SESSION_COOKIE, token, STAFF_MAX_AGE);
 }

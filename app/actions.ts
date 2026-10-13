@@ -3,8 +3,7 @@
 import { randomInt } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { getRole } from "@/lib/session";
-import { roleCan } from "@/lib/auth";
+import { audit, staffActor } from "@/lib/audit";
 import { PROFILE_TYPE_LABEL } from "@/lib/profileTypes";
 import { TEAM_ACCOUNT_IDS } from "@/lib/team";
 import {
@@ -20,52 +19,43 @@ const BAN_DURATION = "876600h";
 type Result = { error?: string };
 
 // Every action here writes to production or reads private data. The proxy
-// only proves *a* session exists — and since 2026-10-13 a regional viewer's
-// session is one too — so each action checks the staff tier itself, whatever
-// screen it was called from. getRole() is null for a regional session.
-async function denied(): Promise<string | null> {
-  const role = await getRole();
-  return role && roleCan(role, "admin") ? null : "No autorizado.";
-}
+// only proves *a* session exists — a regional viewer's is one too — so each
+// action opens with staffActor() (lib/audit.ts): staff tier, and WHO is acting.
+// That name goes wherever a decision is signed (users.reviewed_by, plan and
+// verification history, broadcasts) and into «Actividad del equipo».
 
 // Block a broker at the AUTH layer: they can no longer sign in or refresh their
 // session. (Their current access token stays valid until it expires — Supabase
 // can't revoke an already-issued JWT — so worst case they're fully out within
 // the token lifetime, and immediately on the app's next cold start.)
 export async function blockBroker(id: string): Promise<Result> {
-  const no = await denied();
-  if (no) return { error: no };
+  const actor = await staffActor();
+  if (!actor) return { error: "No autorizado." };
   if (!id) return { error: "Falta el id." };
   const sb = supabaseAdmin();
   const { error } = await sb.auth.admin.updateUserById(id, {
     ban_duration: BAN_DURATION,
   });
   if (error) return { error: error.message };
+  await audit(actor, "bloquear", { tipo: "miembro", id });
   revalidatePath("/");
   return {};
-}
-
-// Who is deciding — stored on users.reviewed_by next to the DB-stamped
-// reviewed_at, so a rejected row can say «por Mariana el 30 ago». Same labels
-// as the header badge.
-async function reviewer(): Promise<string> {
-  const role = await getRole();
-  return role === "dev" ? "Técnico" : role === "mariana" ? "Mariana" : "Admin";
 }
 
 // Approve a pending account. The app's pending screen listens on the users
 // row over Realtime, so the member's phone flips to "¡Listo!" live; the DB
 // trigger also mirrors the decision to WhatsApp (cuenta_aprobada).
 export async function approveUser(id: string): Promise<Result> {
-  const no = await denied();
-  if (no) return { error: no };
+  const actor = await staffActor();
+  if (!actor) return { error: "No autorizado." };
   if (!id) return { error: "Falta el id." };
   const sb = supabaseAdmin();
   const { error } = await sb
     .from("users")
-    .update({ status: "approved", rejection_reason: null, reviewed_by: await reviewer() })
+    .update({ status: "approved", rejection_reason: null, reviewed_by: actor.label })
     .eq("id", id);
   if (error) return { error: error.message };
+  await audit(actor, "aprobar", { tipo: "miembro", id });
   revalidatePath("/aprobaciones");
   return {};
 }
@@ -89,8 +79,8 @@ export async function setUserPlan(
   motivo: PlanMotivo | "quitar" = "otro",
   note: string | null = null,
 ): Promise<Result> {
-  const no = await denied();
-  if (no) return { error: no };
+  const actor = await staffActor();
+  if (!actor) return { error: "No autorizado." };
   if (!id) return { error: "Falta el id." };
   if (plan !== "free" && plan !== "premium") return { error: "Plan inválido." };
   let expires: string | null = null;
@@ -108,11 +98,17 @@ export async function setUserPlan(
     p_expires_at: expires,
     p_source: source,
     p_kind: plan === "premium" ? `admin_${motivo}` : "admin_quitar",
-    p_actor: await reviewer(),
+    p_actor: actor.label,
     p_product_id: null,
     p_raw: { motivo: plan === "premium" ? motivo : "quitar", note: note?.trim() || null },
   });
   if (error) return { error: error.message };
+  await audit(
+    actor,
+    plan === "premium" ? "premium" : "quitar_premium",
+    { tipo: "miembro", id },
+    { vence: expires, motivo, nota: note?.trim() || null },
+  );
   revalidatePath(`/broker/${id}`);
   return {};
 }
@@ -124,8 +120,8 @@ export async function setUserPlan(
 // type; the tier gates key off profile_type, and the app lands them on the
 // right tab on its next check. Works on pending AND rejected rows.
 export async function approveUserAs(id: string, profileType: string): Promise<Result> {
-  const no = await denied();
-  if (no) return { error: no };
+  const actor = await staffActor();
+  if (!actor) return { error: "No autorizado." };
   if (!id) return { error: "Falta el id." };
   if (!(profileType in PROFILE_TYPE_LABEL)) return { error: "Tipo de perfil inválido." };
   const sb = supabaseAdmin();
@@ -135,10 +131,11 @@ export async function approveUserAs(id: string, profileType: string): Promise<Re
       profile_type: profileType,
       status: "approved",
       rejection_reason: null,
-      reviewed_by: await reviewer(),
+      reviewed_by: actor.label,
     })
     .eq("id", id);
   if (error) return { error: error.message };
+  await audit(actor, "aprobar_como", { tipo: "miembro", id }, { tipo: profileType });
   revalidatePath("/aprobaciones");
   revalidatePath("/brokers");
   return {};
@@ -147,30 +144,32 @@ export async function approveUserAs(id: string, profileType: string): Promise<Re
 // Reject a pending account. status='rejected' + the reason the applicant is
 // shown. Reversible: re-approving simply sets status back and clears it.
 export async function rejectUser(id: string, reason: string): Promise<Result> {
-  const no = await denied();
-  if (no) return { error: no };
+  const actor = await staffActor();
+  if (!actor) return { error: "No autorizado." };
   if (!id) return { error: "Falta el id." };
   const clean = reason.trim();
   if (clean.length < 3) return { error: "Escribe un motivo." };
   const sb = supabaseAdmin();
   const { error } = await sb
     .from("users")
-    .update({ status: "rejected", rejection_reason: clean, reviewed_by: await reviewer() })
+    .update({ status: "rejected", rejection_reason: clean, reviewed_by: actor.label })
     .eq("id", id);
   if (error) return { error: error.message };
+  await audit(actor, "rechazar", { tipo: "miembro", id }, { motivo: clean });
   revalidatePath("/aprobaciones");
   return {};
 }
 
 export async function unblockBroker(id: string): Promise<Result> {
-  const no = await denied();
-  if (no) return { error: no };
+  const actor = await staffActor();
+  if (!actor) return { error: "No autorizado." };
   if (!id) return { error: "Falta el id." };
   const sb = supabaseAdmin();
   const { error } = await sb.auth.admin.updateUserById(id, {
     ban_duration: "none",
   });
   if (error) return { error: error.message };
+  await audit(actor, "desbloquear", { tipo: "miembro", id });
   revalidatePath("/");
   return {};
 }
@@ -179,12 +178,13 @@ export async function setReportStatus(
   id: string,
   status: "open" | "actioned" | "dismissed",
 ): Promise<Result> {
-  const no = await denied();
-  if (no) return { error: no };
+  const actor = await staffActor();
+  if (!actor) return { error: "No autorizado." };
   if (!id) return { error: "Falta el id." };
   const sb = supabaseAdmin();
   const { error } = await sb.from("reports").update({ status }).eq("id", id);
   if (error) return { error: error.message };
+  await audit(actor, "reporte", { tipo: "reporte", id }, { status });
   revalidatePath("/reportes");
   return {};
 }
@@ -202,8 +202,8 @@ export async function listRescuePairs(): Promise<{
   pairs?: RescuePair[];
   error?: string;
 }> {
-  const no = await denied();
-  if (no) return { error: no };
+  const actor = await staffActor();
+  if (!actor) return { error: "No autorizado." };
   try {
     const cfg = await getOtpConfig();
     const phones = [...cfg.pairs.keys()].filter((p) => !CANONICAL_PAIRS.has(p));
@@ -241,8 +241,8 @@ export async function listRescuePairs(): Promise<{
 export async function addRescuePair(
   phone10: string,
 ): Promise<{ error?: string; already?: boolean }> {
-  const no = await denied();
-  if (no) return { error: no };
+  const actor = await staffActor();
+  if (!actor) return { error: "No autorizado." };
   const digits = phone10.replace(/\D/g, "");
   if (digits.length !== 10)
     return { error: "El teléfono debe tener 10 dígitos." };
@@ -262,6 +262,7 @@ export async function addRescuePair(
         error:
           "El cambio no se guardó (otro cambio lo pisó). Inténtalo de nuevo.",
       };
+    await audit(actor, "otp_rescate_agregar", { tipo: "telefono", id: phone });
     return {};
   } catch (e) {
     return { error: e instanceof Error ? e.message : String(e) };
@@ -269,8 +270,8 @@ export async function addRescuePair(
 }
 
 export async function removeRescuePair(phone10: string): Promise<Result> {
-  const no = await denied();
-  if (no) return { error: no };
+  const actor = await staffActor();
+  if (!actor) return { error: "No autorizado." };
   const digits = phone10.replace(/\D/g, "");
   const phone = `52${digits}`;
   if (CANONICAL_PAIRS.has(phone))
@@ -280,6 +281,7 @@ export async function removeRescuePair(phone10: string): Promise<Result> {
     if (!cfg.pairs.has(phone)) return {};
     cfg.pairs.delete(phone);
     await saveOtpConfig(cfg);
+    await audit(actor, "otp_rescate_quitar", { tipo: "telefono", id: phone });
     return {};
   } catch (e) {
     return { error: e instanceof Error ? e.message : String(e) };
@@ -324,8 +326,8 @@ export async function createBroker(
   mode: PinMode = "temp",
   chosenPin?: string,
 ): Promise<AltaResult> {
-  const no = await denied();
-  if (no) return { error: no };
+  const actor = await staffActor();
+  if (!actor) return { error: "No autorizado." };
   // Names are optional: an empty name routes the broker through onboarding
   // after the (forced) PIN step, so they type their own.
   const first = firstName.trim();
@@ -387,6 +389,12 @@ export async function createBroker(
     return { error: `No se pudo crear el perfil: ${profileErr.message}` };
   }
 
+  await audit(
+    actor,
+    "alta_manual",
+    { tipo: "miembro", id: created.user.id, label: [first, last].filter(Boolean).join(" ") || phone },
+    { modo: mode },
+  );
   revalidatePath("/");
   return { pin };
 }
@@ -407,8 +415,8 @@ export async function crearZona(
   // roles. An action that writes to production matching enforces its own
   // gate, same tier as the page that hosts it.
   // Franz 08-31: zone curation opens to the admin tier (Pablo, Mariana).
-  const role = await getRole();
-  if (!role || !roleCan(role, "admin")) return { error: "No autorizado." };
+  const actor = await staffActor();
+  if (!actor) return { error: "No autorizado." };
 
   const clean = nombre.trim();
   if (clean.length < 3) return { error: "Ponle un nombre a la zona." };
@@ -433,6 +441,11 @@ export async function crearZona(
   if (error) return { error: error.message };
   revalidatePath("/zonas");
   const res = (data ?? {}) as { propiedades_movidas?: number; key?: string };
+  await audit(actor, "zona_crear", { tipo: "zona", id: res.key ?? `zona-${slug}`, label: clean }, {
+    estado,
+    colonias: miembros.length,
+    movidas: res.propiedades_movidas ?? 0,
+  });
   return { movidas: res.propiedades_movidas ?? 0, key: res.key };
 }
 
@@ -444,8 +457,8 @@ export async function crearZonaDibujada(
   estado: string,
   ring: [number, number][],
 ): Promise<Result & { movidas?: number; key?: string }> {
-  const role = await getRole();
-  if (!role || !roleCan(role, "admin")) return { error: "No autorizado." };
+  const actor = await staffActor();
+  if (!actor) return { error: "No autorizado." };
 
   const clean = nombre.trim();
   if (clean.length < 3) return { error: "Ponle un nombre a la zona." };
@@ -472,6 +485,10 @@ export async function crearZonaDibujada(
   if (error) return { error: error.message };
   revalidatePath("/zonas");
   const res = (data ?? {}) as { propiedades_movidas?: number; key?: string };
+  await audit(actor, "zona_dibujar", { tipo: "zona", id: res.key ?? `zona-${slug}`, label: clean }, {
+    estado,
+    movidas: res.propiedades_movidas ?? 0,
+  });
   return { movidas: res.propiedades_movidas ?? 0, key: res.key };
 }
 
@@ -483,8 +500,8 @@ export async function guardarZona(
   estado: string,
   cambio: { miembros: string[] } | { ring: [number, number][] },
 ): Promise<Result & { movidas?: number }> {
-  const role = await getRole();
-  if (!role || !roleCan(role, "admin")) return { error: "No autorizado." };
+  const actor = await staffActor();
+  if (!actor) return { error: "No autorizado." };
   if (!/^zona-[a-z0-9-]+$/.test(key)) return { error: "Clave de zona inválida." };
   const clean = nombre.replace(/ \(ZONA\)$/i, "").trim();
 
@@ -500,29 +517,38 @@ export async function guardarZona(
         });
   if (error) return { error: error.message };
   revalidatePath("/zonas");
-  return { movidas: (data as { propiedades_movidas?: number })?.propiedades_movidas ?? 0 };
+  const movidas = (data as { propiedades_movidas?: number })?.propiedades_movidas ?? 0;
+  await audit(actor, "zona_editar", { tipo: "zona", id: key, label: clean }, {
+    estado,
+    cambio: "miembros" in cambio ? "colonias" : "dibujo",
+    movidas,
+  });
+  return { movidas };
 }
 
 // Delete a zone; its listings are re-homed before anything else happens.
 export async function borrarZona(key: string): Promise<Result & { movidas?: number }> {
-  const role = await getRole();
-  if (!role || !roleCan(role, "admin")) return { error: "No autorizado." };
+  const actor = await staffActor();
+  if (!actor) return { error: "No autorizado." };
   const sb = supabaseAdmin();
   const { data, error } = await sb.rpc("admin_delete_zona", { p_key: key });
   if (error) return { error: error.message };
   revalidatePath("/zonas");
-  return { movidas: (data as { propiedades_reasignadas?: number })?.propiedades_reasignadas ?? 0 };
+  const movidas = (data as { propiedades_reasignadas?: number })?.propiedades_reasignadas ?? 0;
+  await audit(actor, "zona_borrar", { tipo: "zona", id: key }, { movidas });
+  return { movidas };
 }
 
 // "This is not a zone" — junk names leave the queue for good.
 export async function ignorarNombre(estado: string, nombre: string): Promise<Result> {
-  const role = await getRole();
-  if (!role || !roleCan(role, "admin")) return { error: "No autorizado." };
+  const actor = await staffActor();
+  if (!actor) return { error: "No autorizado." };
   const sb = supabaseAdmin();
   const { error } = await sb.rpc("admin_dismiss_zona_name", {
     p_estado: estado, p_nombre: nombre,
   });
   if (error) return { error: error.message };
+  await audit(actor, "zona_ignorar_nombre", { tipo: "zona", label: nombre }, { estado });
   revalidatePath("/zonas");
   return {};
 }
@@ -534,8 +560,8 @@ export async function ignorarNombre(estado: string, nombre: string): Promise<Res
 // original map pick (place_id) is cleared — a human just overruled it. Keeping
 // closes the case so the sweep never raises it again.
 export async function acceptGeoReview(id: string): Promise<Result> {
-  const no = await denied();
-  if (no) return { error: no };
+  const actor = await staffActor();
+  if (!actor) return { error: "No autorizado." };
   if (!id) return { error: "Falta el id." };
   const sb = supabaseAdmin();
   const { data: row, error } = await sb
@@ -573,24 +599,26 @@ export async function acceptGeoReview(id: string): Promise<Result> {
   }
   const { error: e3 } = await sb
     .from("geo_review")
-    .update({ status: "accepted", decided_at: new Date().toISOString(), decided_by: await reviewer() })
+    .update({ status: "accepted", decided_at: new Date().toISOString(), decided_by: actor.label })
     .eq("id", id);
   if (e3) return { error: e3.message };
+  await audit(actor, "ubicacion_aceptar", { tipo: "ubicacion", id });
   revalidatePath("/ubicaciones");
   return {};
 }
 
 export async function keepGeoReview(id: string): Promise<Result> {
-  const no = await denied();
-  if (no) return { error: no };
+  const actor = await staffActor();
+  if (!actor) return { error: "No autorizado." };
   if (!id) return { error: "Falta el id." };
   const sb = supabaseAdmin();
   const { error } = await sb
     .from("geo_review")
-    .update({ status: "kept", decided_at: new Date().toISOString(), decided_by: await reviewer() })
+    .update({ status: "kept", decided_at: new Date().toISOString(), decided_by: actor.label })
     .eq("id", id)
     .eq("status", "pending");
   if (error) return { error: error.message };
+  await audit(actor, "ubicacion_mantener", { tipo: "ubicacion", id });
   revalidatePath("/ubicaciones");
   return {};
 }
@@ -610,8 +638,8 @@ export async function sendBroadcast(input: {
   tier?: string | null;
   eventId?: string | null;
 }): Promise<Result & { sent?: number }> {
-  const role = await getRole();
-  if (!role || !roleCan(role, "admin")) return { error: "Sin permiso." };
+  const actor = await staffActor();
+  if (!actor) return { error: "Sin permiso." };
 
   const body = input.body?.trim();
   if (!body) return { error: "El texto va vacío." };
@@ -643,7 +671,7 @@ export async function sendBroadcast(input: {
       body,
       audience: { state: estado, tier },
       event_id: input.eventId || null,
-      sent_by: role,
+      sent_by: actor.label,
       devices: tokens.length,
       people,
     })
@@ -693,6 +721,12 @@ export async function sendBroadcast(input: {
   // token para dejar de empujar al vacío (igual que push-fanout).
   if (dead.length) await sb.from("push_tokens").delete().in("token", dead);
   await sb.from("broadcasts").update({ ok, failed }).eq("id", bc.id);
+  await audit(actor, "aviso", { tipo: "aviso", id: bc.id, label: body.slice(0, 80) }, {
+    estado,
+    tier,
+    enviados: ok,
+    fallidos: failed,
+  });
 
   revalidatePath("/avisos");
   return { sent: ok };
@@ -719,8 +753,8 @@ export async function drawRaffleWinner(input: {
   pool: RifaPool;
   exclude: string[];
 }): Promise<Result & { winner?: RifaWinner }> {
-  const role = await getRole();
-  if (!role || !roleCan(role, "admin")) return { error: "Sin permiso." };
+  const actor = await staffActor();
+  if (!actor) return { error: "Sin permiso." };
   if (!input.eventId) return { error: "Elige un evento." };
 
   const statuses = input.pool === "registered" ? ["attended", "confirmed"] : ["attended"];
@@ -784,6 +818,10 @@ export async function drawRaffleWinner(input: {
   const u = (Array.isArray(row.user) ? row.user[0] : row.user) as
     | { name: string | null; phone: string | null; company: string | null }
     | null;
+  await audit(actor, "rifa", { tipo: "evento", id: input.eventId }, {
+    ganador: u?.name?.trim() || "Sin nombre",
+    bolsa: input.pool,
+  });
   return {
     winner: {
       attendeeId: pick,
@@ -803,8 +841,8 @@ async function decideVerification(
   status: "verified" | "rejected" | "revoked",
   reason: string | null,
 ): Promise<Result> {
-  const no = await denied();
-  if (no) return { error: no };
+  const actor = await staffActor();
+  if (!actor) return { error: "No autorizado." };
   if (!id) return { error: "Falta el id." };
   const clean = reason?.trim() ?? "";
   if (status !== "verified" && clean.length < 3) return { error: "Escribe un motivo." };
@@ -813,7 +851,7 @@ async function decideVerification(
     p_user: id,
     p_status: status,
     p_reason: status === "verified" ? null : clean,
-    p_actor: await reviewer(),
+    p_actor: actor.label,
   });
   if (error) {
     // The function refuses stale transitions (double click, another tab).
@@ -828,6 +866,12 @@ async function decideVerification(
     }
     return { error: error.message };
   }
+  await audit(
+    actor,
+    status === "verified" ? "verificar" : status === "rejected" ? "verificacion_rechazar" : "verificacion_quitar",
+    { tipo: "miembro", id },
+    clean ? { motivo: clean } : null,
+  );
   revalidatePath("/verificaciones");
   revalidatePath(`/broker/${id}`);
   return {};

@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session";
-import { getAccess, homeOf } from "@/lib/access";
+import { getRegional, homeOf } from "@/lib/access";
 
 export const dynamic = "force-dynamic";
 
@@ -10,8 +10,8 @@ export const dynamic = "force-dynamic";
 export default async function RegionalHome() {
   const s = await getSession();
   if (!s) redirect("/login");
-  if (s.kind === "staff") redirect("/");
-  const access = await getAccess();
+  if (s.kind === "password" || s.equipo) redirect("/");
+  const access = await getRegional();
   if (!access) redirect("/api/logout?motivo=vencido");
   redirect(homeOf(access));
 }

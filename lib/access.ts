@@ -1,11 +1,10 @@
-import { cache } from "react";
 import { redirect } from "next/navigation";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { getSession } from "@/lib/session";
+import { getAccess, getRole, getSession, type Access } from "@/lib/session";
 import { roleCan, type Role } from "@/lib/auth";
 import type { Seccion } from "@/lib/accesoShared";
 
-export type { Seccion };
+export type { Seccion, Access };
 
 // Acceso regional (Franz + Pablo 2026-10-13): a named Propia member sees only
 // the sections they were granted, only for their estados, read-only. The grant
@@ -24,49 +23,13 @@ export const SECCIONES: { key: Seccion; href: string; label: string }[] = [
   { key: "miembros", href: "/brokers", label: "Miembros" },
 ];
 
-export type Access = {
-  id: string;
-  userId: string;
-  nombre: string;
-  estados: string[];
-  secciones: Seccion[];
-  verTelefonos: boolean;
-  expiresAt: string;
-};
-
 export type Viewer = { kind: "staff"; role: Role } | { kind: "regional"; access: Access };
 
-type TouchRow = {
-  id: string;
-  user_id: string;
-  nombre: string;
-  estados: string[];
-  secciones: Seccion[];
-  ver_telefonos: boolean;
-  expires_at: string;
-};
-
-// The live grant behind a regional cookie, or null (staff, no session, or a
-// grant that was revoked / expired / whose member was blocked).
-export const getAccess = cache(async (): Promise<Access | null> => {
-  const s = await getSession();
-  if (s?.kind !== "regional") return null;
-  const { data, error } = await supabaseAdmin().rpc("admin_access_touch", {
-    p_id: s.accessId,
-    p_version: s.version,
-  });
-  if (error || !data) return null;
-  const r = data as TouchRow;
-  return {
-    id: r.id,
-    userId: r.user_id,
-    nombre: r.nombre,
-    estados: r.estados,
-    secciones: SECCIONES.map((x) => x.key).filter((k) => r.secciones.includes(k)),
-    verTelefonos: r.ver_telefonos,
-    expiresAt: r.expires_at,
-  };
-});
+// The live REGIONAL grant behind this request, or null (team, password, none).
+export async function getRegional(): Promise<Access | null> {
+  const a = await getAccess();
+  return a?.rol === "regional" ? a : null;
+}
 
 export function homeOf(a: Access): string {
   return SECCIONES.find((s) => a.secciones.includes(s.key))?.href ?? "/api/logout";
@@ -77,23 +40,26 @@ export function homeOf(a: Access): string {
 export async function requireViewer(seccion: Seccion): Promise<Viewer> {
   const s = await getSession();
   if (!s) redirect("/login");
-  if (s.kind === "staff") {
-    if (!roleCan(s.role, "admin")) redirect("/");
-    return { kind: "staff", role: s.role };
+  if (s.kind === "persona") {
+    const a = await getAccess();
+    if (!a) redirect("/api/logout?motivo=vencido");
+    if (a.rol === "regional") {
+      if (!a.secciones.includes(seccion)) redirect(homeOf(a));
+      return { kind: "regional", access: a };
+    }
   }
-  const access = await getAccess();
-  if (!access) redirect("/api/logout?motivo=vencido");
-  if (!access.secciones.includes(seccion)) redirect(homeOf(access));
-  return { kind: "regional", access };
+  const role = await getRole();
+  if (!role) redirect("/login");
+  if (!roleCan(role, "admin")) redirect("/");
+  return { kind: "staff", role };
 }
 
 // Same rule for route handlers — no redirects, null = 401.
 export async function apiViewer(seccion: Seccion): Promise<Viewer | null> {
-  const s = await getSession();
-  if (!s) return null;
-  if (s.kind === "staff") return roleCan(s.role, "admin") ? { kind: "staff", role: s.role } : null;
-  const access = await getAccess();
-  return access && access.secciones.includes(seccion) ? { kind: "regional", access } : null;
+  const role = await getRole();
+  if (role) return roleCan(role, "admin") ? { kind: "staff", role } : null;
+  const a = await getRegional();
+  return a && a.secciones.includes(seccion) ? { kind: "regional", access: a } : null;
 }
 
 export function isRegional(v: Viewer): v is { kind: "regional"; access: Access } {

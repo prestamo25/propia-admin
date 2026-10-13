@@ -2,8 +2,8 @@ import Link from "next/link";
 import { countOpenReports } from "@/lib/reports";
 import { countPendingUsers } from "@/lib/aprobaciones";
 import { countPendingVerifications } from "@/lib/verificaciones";
-import { getRole } from "@/lib/session";
-import { getAccess } from "@/lib/access";
+import { getAccess, getRole } from "@/lib/session";
+import { ROL_LABEL } from "@/lib/auth";
 import { MobileNav } from "@/components/MobileNav";
 import {
   countFor,
@@ -57,9 +57,11 @@ const chevron = (
 
 export async function TopNav({ active }: { active: NavKey }) {
   // A regional viewer (acceso regional, 2026-10-13) gets their own sections,
-  // their estado as the badge, and none of the team's queue counts.
+  // their estado as the badge, and none of the team's queue counts. A team
+  // phone login shows who it is («Pablo · Admin»).
   const access = await getAccess();
-  const [openReports, pendingUsers, pendingVerifications, role] = access
+  const regional = access?.rol === "regional" ? access : null;
+  const [openReports, pendingUsers, pendingVerifications, role] = regional
     ? [0, 0, 0, null]
     : await Promise.all([
         countOpenReports(),
@@ -69,15 +71,23 @@ export async function TopNav({ active }: { active: NavKey }) {
       ]);
   const counts: NavCounts = { openReports, pendingUsers, pendingVerifications };
   const isDev = role === "dev";
-  const nav = access ? navForRegional(access.secciones) : navFor(isDev, isDev || role === "admin");
-  const home = access ? "/regional" : "/";
-  const roleBadge = access
-    ? { label: access.estados.join(" · "), cls: "bg-amber-100 text-amber-800" }
-    : role === "dev"
-      ? { label: "Técnico", cls: "bg-violet-100 text-violet-700" }
+  const nav = regional ? navForRegional(regional.secciones) : navFor(isDev, isDev || role === "admin");
+  const home = regional ? "/regional" : "/";
+  const tone =
+    role === "dev"
+      ? "bg-violet-100 text-violet-700"
       : role === "mariana"
-        ? { label: "Mariana", cls: "bg-sky-100 text-sky-700" }
-        : { label: "Admin", cls: "bg-neutral-100 text-neutral-500" };
+        ? "bg-sky-100 text-sky-700"
+        : "bg-neutral-100 text-neutral-500";
+  const roleBadge = regional
+    ? { label: regional.estados.join(" · "), cls: "bg-amber-100 text-amber-800" }
+    : access
+      ? { label: `${access.nombreCorto} · ${ROL_LABEL[access.rol]}`, cls: tone }
+      : role === "dev"
+        ? { label: "Técnico", cls: tone }
+        : role === "mariana"
+          ? { label: "Mariana", cls: tone }
+          : { label: "Admin", cls: tone };
 
   const badge = (n: number, extra = "") =>
     n > 0 ? (
@@ -217,7 +227,7 @@ export async function TopNav({ active }: { active: NavKey }) {
               </span>
             </Link>
             <span
-              title={access ? `Acceso de ${access.nombre}` : undefined}
+              title={access ? access.nombre : "Sesión con contraseña"}
               className={`rounded-md px-1.5 py-0.5 text-[11px] font-medium hidden navmd:inline ${roleBadge.cls}`}
             >
               {roleBadge.label}

@@ -134,6 +134,12 @@ const ICONS: Partial<Record<NavKey, React.ReactNode>> = {
       <circle cx="12" cy="11" r="2" />
     </svg>
   ),
+  actividad: (
+    <svg {...STROKE}>
+      <path d="M12 8v4l3 2" />
+      <circle cx="12" cy="12" r="9" />
+    </svg>
+  ),
   accesos: (
     <svg {...STROKE}>
       <circle cx="7.5" cy="15.5" r="4.5" />

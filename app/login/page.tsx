@@ -1,21 +1,57 @@
+import { cookies } from "next/headers";
+import { PASSWORD_ROLES, PENDING_COOKIE, verifyPendingToken } from "@/lib/auth";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
+
 const INPUT =
   "mt-1.5 w-full rounded-xl border border-neutral-200 bg-white px-3.5 py-2.5 text-neutral-900 outline-none transition placeholder:text-neutral-300 focus:border-brand focus:ring-4 focus:ring-brand/10";
+const PRIMARY =
+  "mt-5 w-full rounded-xl bg-gradient-to-b from-brand to-brand-dark py-2.5 font-medium text-white shadow-sm transition hover:shadow-lift hover:brightness-[1.07] active:brightness-95";
+const LINK = "font-medium text-neutral-500 transition hover:text-neutral-800";
 
-// Acceso regional (2026-10-13): ?modo=propia swaps the team password for a
-// member's phone + Propia PIN. Plain links, no client JS.
-const PROPIA_ERRORS: Record<string, string> = {
+// Login (2026-10-13): everyone — team and regional — signs in with their
+// phone + the PIN of the Propia app; the team then types the code we send by
+// WhatsApp (?paso=codigo). The team passwords live behind ?modo=contrasena
+// while they last (fase 2: Franz's emergency password only). Plain forms and
+// links, no client JS.
+const ERRORS: Record<string, string> = {
   "1": "Número o PIN incorrectos, o este número no tiene acceso al panel.",
   bloqueado: "Demasiados intentos. Espera 15 minutos y vuelve a intentarlo.",
   vencido: "Tu acceso al panel terminó o fue retirado.",
+  codigo: "Ese código no es correcto. Revisa el último que te llegó.",
+  "codigo-vencido": "El código venció. Pide uno nuevo o vuelve a entrar.",
+  envio: "No pudimos mandar o revisar el código. Intenta otra vez, o pídelo por SMS.",
 };
+
+function ErrorLine({ text }: { text: string }) {
+  return (
+    <p className="mt-3 flex items-start gap-1.5 text-sm text-rose-600">
+      <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-rose-500" />
+      {text}
+    </p>
+  );
+}
+
+// Last four digits of the phone that is waiting for a code, if the
+// «passed the PIN» cookie is still good.
+async function pendingPhoneTail(): Promise<string | null> {
+  const jar = await cookies();
+  const p = await verifyPendingToken(jar.get(PENDING_COOKIE)?.value, process.env.SESSION_SECRET ?? "");
+  if (!p) return null;
+  const { data } = await supabaseAdmin().rpc("admin_access_pending", { p_id: p.accessId, p_version: p.version });
+  const phone = (data as { phone?: string } | null)?.phone;
+  return phone ? phone.slice(-4) : null;
+}
 
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; modo?: string }>;
+  searchParams: Promise<{ error?: string; modo?: string; paso?: string; enviado?: string }>;
 }) {
-  const { error, modo } = await searchParams;
-  const propia = modo === "propia";
+  const { error, modo, paso, enviado } = await searchParams;
+  const codigo = paso === "codigo";
+  const contrasena = !codigo && modo === "contrasena";
+  const tail = codigo ? await pendingPhoneTail() : null;
+  const emergencia = PASSWORD_ROLES.length === 1;
 
   return (
     <main className="min-h-screen lg:grid lg:grid-cols-2">
@@ -75,16 +111,94 @@ export default async function LoginPage({
 
           <div className="mb-6">
             <h2 className="text-2xl font-semibold tracking-tight text-neutral-900">
-              Inicia sesión
+              {codigo ? "Revisa tu WhatsApp" : contrasena && emergencia ? "Acceso de emergencia" : "Inicia sesión"}
             </h2>
             <p className="mt-1 text-sm text-neutral-500">
-              {propia
-                ? "Entra con tu número y tu PIN de la app de Propia."
-                : "Ingresa la contraseña para acceder al panel."}
+              {codigo
+                ? tail
+                  ? `Te mandamos un código ${enviado === "sms" ? "por SMS" : "por WhatsApp"} al número que termina en ${tail}.`
+                  : "El código venció. Vuelve a entrar con tu número y tu PIN."
+                : contrasena
+                  ? emergencia
+                    ? "Sólo para cuando no se puede entrar con el teléfono."
+                    : "Ingresa la contraseña del equipo."
+                  : "Entra con tu número y tu PIN de la app de Propia."}
             </p>
           </div>
 
-          {propia ? (
+          {codigo ? (
+            tail ? (
+              <>
+                <form action="/api/login/codigo" method="post">
+                  <label htmlFor="codigo" className="block text-sm font-medium text-neutral-700">
+                    Código
+                  </label>
+                  <input
+                    id="codigo"
+                    name="codigo"
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    autoFocus
+                    required
+                    pattern="[0-9]{6}"
+                    maxLength={6}
+                    placeholder="000000"
+                    className={`${INPUT} text-center text-lg tracking-[0.4em]`}
+                  />
+                  {error ? <ErrorLine text={ERRORS[error] ?? ERRORS.codigo} /> : null}
+                  <button type="submit" className={PRIMARY}>
+                    Entrar
+                  </button>
+                </form>
+                <p className="mt-4 text-xs leading-relaxed text-neutral-400">
+                  Puede tardar hasta un minuto en llegar.
+                </p>
+                <div className="mt-5 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-sm">
+                  <form action="/api/login/codigo" method="post">
+                    <input type="hidden" name="accion" value="reenviar" />
+                    <input type="hidden" name="canal" value="whatsapp" />
+                    <button type="submit" className={LINK}>Reenviar por WhatsApp</button>
+                  </form>
+                  <form action="/api/login/codigo" method="post">
+                    <input type="hidden" name="accion" value="reenviar" />
+                    <input type="hidden" name="canal" value="sms" />
+                    <button type="submit" className={LINK}>Mandarlo por SMS</button>
+                  </form>
+                  <form action="/api/login/codigo" method="post">
+                    <input type="hidden" name="accion" value="cancelar" />
+                    <button type="submit" className={LINK}>Volver</button>
+                  </form>
+                </div>
+              </>
+            ) : (
+              <a href="/login" className={`${PRIMARY} block text-center`}>
+                Volver a entrar
+              </a>
+            )
+          ) : contrasena ? (
+            <form action="/api/login" method="post">
+              <label htmlFor="password" className="block text-sm font-medium text-neutral-700">
+                Contraseña
+              </label>
+              <input
+                id="password"
+                name="password"
+                type="password"
+                autoFocus
+                required
+                placeholder="••••••••"
+                className={INPUT}
+              />
+              {error ? <ErrorLine text="Contraseña incorrecta." /> : null}
+              <button type="submit" className={PRIMARY}>
+                Entrar
+              </button>
+              <a href="/login" className={`mt-6 block text-center text-sm ${LINK}`}>
+                Entrar con mi número
+              </a>
+            </form>
+          ) : (
             <form action="/api/login" method="post">
               <label htmlFor="phone" className="block text-sm font-medium text-neutral-700">
                 Teléfono
@@ -116,67 +230,16 @@ export default async function LoginPage({
                 placeholder="••••••"
                 className={`${INPUT} tracking-[0.3em]`}
               />
-
-              {error ? (
-                <p className="mt-3 flex items-start gap-1.5 text-sm text-rose-600">
-                  <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-rose-500" />
-                  {PROPIA_ERRORS[error] ?? PROPIA_ERRORS["1"]}
-                </p>
-              ) : null}
-
-              <button
-                type="submit"
-                className="mt-5 w-full rounded-xl bg-gradient-to-b from-brand to-brand-dark py-2.5 font-medium text-white shadow-sm transition hover:shadow-lift hover:brightness-[1.07] active:brightness-95"
-              >
+              {error ? <ErrorLine text={ERRORS[error] ?? ERRORS["1"]} /> : null}
+              <button type="submit" className={PRIMARY}>
                 Entrar
               </button>
               <p className="mt-4 text-xs leading-relaxed text-neutral-400">
                 Es el mismo PIN con el que entras a la app. Si no lo recuerdas, cámbialo desde la
                 app con «Olvidé mi PIN».
               </p>
-              <a
-                href="/login"
-                className="mt-6 block text-center text-sm font-medium text-neutral-500 transition hover:text-neutral-800"
-              >
-                Entrar con la contraseña del equipo
-              </a>
-            </form>
-          ) : (
-            <form action="/api/login" method="post">
-              <label
-                htmlFor="password"
-                className="block text-sm font-medium text-neutral-700"
-              >
-                Contraseña
-              </label>
-              <input
-                id="password"
-                name="password"
-                type="password"
-                autoFocus
-                required
-                placeholder="••••••••"
-                className={INPUT}
-              />
-
-              {error ? (
-                <p className="mt-3 flex items-center gap-1.5 text-sm text-rose-600">
-                  <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
-                  Contraseña incorrecta.
-                </p>
-              ) : null}
-
-              <button
-                type="submit"
-                className="mt-5 w-full rounded-xl bg-gradient-to-b from-brand to-brand-dark py-2.5 font-medium text-white shadow-sm transition hover:shadow-lift hover:brightness-[1.07] active:brightness-95"
-              >
-                Entrar
-              </button>
-              <a
-                href="/login?modo=propia"
-                className="mt-6 block text-center text-sm font-medium text-neutral-500 transition hover:text-neutral-800"
-              >
-                Soy miembro de Propia con acceso al panel
+              <a href="/login?modo=contrasena" className={`mt-6 block text-center text-xs ${LINK}`}>
+                {emergencia ? "Acceso de emergencia" : "Entrar con contraseña del equipo"}
               </a>
             </form>
           )}

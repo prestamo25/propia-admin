@@ -1,19 +1,24 @@
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import type { Seccion } from "@/lib/accesoShared";
+import type { Rol } from "@/lib/auth";
 
-// Acceso regional — the team's side (Accesos page + the card on a member's
-// page): who has been given what, and what they did with it.
+// Access to the panel — the oversight side (Accesos page + the card on a
+// member's page): the team (dueño / admin / equipo) and the regional viewers,
+// what each can see, and what they did with it.
 
 export type AccessRow = {
   id: string;
   user_id: string;
+  rol: Rol;
+  alias: string | null;
   nombre: string;
   phone: string | null;
   avatar_url: string | null;
   estados: string[];
   secciones: Seccion[];
   ver_telefonos: boolean;
-  expires_at: string;
+  // null for the team: it doesn't expire.
+  expires_at: string | null;
   granted_by: string;
   created_at: string;
   revoked_at: string | null;
@@ -28,7 +33,20 @@ export type AccessEvent = {
   id: number;
   access_id: string | null;
   phone: string | null;
-  evento: "login" | "login_fallido" | "bloqueado" | "ver_miembro" | "otorgado" | "editado" | "renovado" | "revocado";
+  evento:
+    | "login"
+    | "login_fallido"
+    | "bloqueado"
+    | "ver_miembro"
+    | "otorgado"
+    | "editado"
+    | "renovado"
+    | "revocado"
+    | "codigo_enviado"
+    | "codigo_fallido"
+    | "emergencia"
+    | "desbloqueado"
+    | "sesiones_cerradas";
   detalle: Record<string, unknown> | null;
   at: string;
 };
@@ -44,7 +62,7 @@ type Raw = Omit<AccessRow, "nombre" | "phone" | "avatar_url" | "vigente"> & {
 };
 
 const SELECT =
-  "id, user_id, estados, secciones, ver_telefonos, expires_at, granted_by, created_at, revoked_at, revoked_by, last_login_at, last_seen_at, user:users(name, first_name, last_name, phone, avatar_url)";
+  "id, user_id, rol, alias, estados, secciones, ver_telefonos, expires_at, granted_by, created_at, revoked_at, revoked_by, last_login_at, last_seen_at, user:users(name, first_name, last_name, phone, avatar_url)";
 
 function shape({ user: u, ...r }: Raw): AccessRow {
   return {
@@ -52,18 +70,24 @@ function shape({ user: u, ...r }: Raw): AccessRow {
     nombre: [u?.first_name, u?.last_name].filter(Boolean).join(" ").trim() || u?.name || "Sin nombre",
     phone: u?.phone ?? null,
     avatar_url: u?.avatar_url ?? null,
-    vigente: !r.revoked_at && new Date(r.expires_at).getTime() > Date.now(),
+    vigente: !r.revoked_at && (!r.expires_at || new Date(r.expires_at).getTime() > Date.now()),
   };
 }
+
+export type Locked = { phone: string; hasta: string };
 
 export async function fetchAccesos(): Promise<{
   accesos: AccessRow[];
   eventos: AccessEvent[];
   fallidos: AccessEvent[];
+  bloqueados: Locked[];
+  // Logins with a team password (fase 2: the emergency one), last 30 days.
+  contrasena: AccessEvent[];
 }> {
   const sb = supabaseAdmin();
   const weekAgo = new Date(Date.now() - 7 * 86_400_000).toISOString();
-  const [a, e, f] = await Promise.all([
+  const monthAgo = new Date(Date.now() - 30 * 86_400_000).toISOString();
+  const [a, e, f, l, c] = await Promise.all([
     sb.from("admin_access").select(SELECT).order("created_at", { ascending: false }),
     sb
       .from("admin_access_log")
@@ -76,7 +100,16 @@ export async function fetchAccesos(): Promise<{
       .from("admin_access_log")
       .select("id, access_id, phone, evento, detalle, at")
       .is("access_id", null)
+      .in("evento", ["login_fallido", "bloqueado"])
       .gte("at", weekAgo)
+      .order("at", { ascending: false })
+      .limit(50),
+    sb.rpc("admin_access_locked"),
+    sb
+      .from("admin_access_log")
+      .select("id, access_id, phone, evento, detalle, at")
+      .eq("evento", "emergencia")
+      .gte("at", monthAgo)
       .order("at", { ascending: false })
       .limit(50),
   ]);
@@ -87,6 +120,8 @@ export async function fetchAccesos(): Promise<{
     accesos: ((a.data ?? []) as unknown as Raw[]).map(shape),
     eventos: (e.data ?? []) as AccessEvent[],
     fallidos: (f.data ?? []) as AccessEvent[],
+    bloqueados: (l.data ?? []) as Locked[],
+    contrasena: (c.data ?? []) as AccessEvent[],
   };
 }
 

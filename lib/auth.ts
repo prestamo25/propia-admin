@@ -1,29 +1,52 @@
-// Stateless session cookie. Two kinds:
+// Stateless session cookie, three kinds:
 //
-// STAFF — the password-per-role gate. The cookie holds "<role>.<hmac>", where
-// the HMAC (keyed by SESSION_SECRET) is computed over the role itself — so the
-// role can't be tampered with, and being httpOnly it can't be read by client
-// JS. Three roles today:
-//   • admin   — Pablo / business: everything except the Técnico screens
-//   • mariana — Mariana: same tier as admin, own revocable password
-//   • dev     — técnico (superuser): everything above + technical screens
-// Each role has its own password (ADMIN_PASSWORD / MARIANA_PASSWORD /
-// DEV_PASSWORD). Removing a role from ROLES invalidates its issued cookies.
+// PERSONA, team (equipo login, 2026-10-13): Franz, Pablo and Mariana sign in
+// with their phone + app PIN + a WhatsApp code. "equipo:<access id>:<version>.<hmac>".
+// PERSONA, regional (acceso regional, 2026-10-13): a member outside the team,
+// phone + PIN, read-only on their estados. "regional:<access id>:<version>.<hmac>".
+//   For both, WHO they are and WHAT they may do (rol, estados, secciones) is
+//   never in the cookie — every page and API re-reads the grant
+//   (admin_access_touch via lib/session.ts), so a revoke, a role change or
+//   «Cerrar sesiones» (version bump) lands on the next click.
 //
-// REGIONAL — acceso regional (2026-10-13): a named Propia member who signed in
-// with their phone + PIN. The cookie holds "regional:<access id>:<version>.<hmac>";
-// WHAT they may see (estados, secciones) is never in the cookie — every page
-// and API re-reads the grant (lib/access.ts), so a revoke lands on the next
-// click. Bumping the grant's version kills cookies already issued.
+// PASSWORD — the original password-per-role gate: "<role>.<hmac>", HMAC over
+// the role. Roles: admin (Pablo) / mariana / dev (técnico). Only the roles in
+// PASSWORD_ROLES are honored; dropping one there kills its cookies at once.
+//
+// All HMACs are keyed by SESSION_SECRET; cookies are httpOnly.
 
 export const SESSION_COOKIE = "padmin";
+// Between the PIN and the WhatsApp code (team only): who passed the PIN, for
+// 10 minutes. Never a session by itself.
+export const PENDING_COOKIE = "padmin_codigo";
 
 export type Role = "admin" | "mariana" | "dev";
 const ROLES: Role[] = ["admin", "mariana", "dev"];
 
+// Passwords still accepted. Fase 1 (2026-10-13): all three, side by side with
+// the phone login. Fase 2, once Pablo and Mariana have signed in the new way:
+// ["dev"] only — Franz's emergency password.
+export const PASSWORD_ROLES: Role[] = ["admin", "mariana", "dev"];
+
+// admin_access.rol → the tier the rest of the panel already gates on: the
+// dueño is the superuser (técnico screens included), Pablo is admin, Mariana
+// keeps the tier her password had.
+export type Rol = "regional" | "equipo" | "admin" | "dueno";
+export const ROL_TIER: Record<Exclude<Rol, "regional">, Role> = {
+  dueno: "dev",
+  admin: "admin",
+  equipo: "mariana",
+};
+export const ROL_LABEL: Record<Rol, string> = {
+  dueno: "Dueño",
+  admin: "Admin",
+  equipo: "Equipo",
+  regional: "Regional",
+};
+
 export type Session =
-  | { kind: "staff"; role: Role }
-  | { kind: "regional"; accessId: string; version: number };
+  | { kind: "password"; role: Role }
+  | { kind: "persona"; equipo: boolean; accessId: string; version: number };
 
 // Tiered access: gates ask for the tier they need ("admin" = business screens,
 // "dev" = técnico). A role passes any gate at or below its own tier.
@@ -33,10 +56,9 @@ export function roleCan(role: Role, needs: Role): boolean {
   return TIER[role] >= TIER[needs];
 }
 
-// Regional cookies live 14 days (staff: 30) — a shorter leash for people
-// outside the team.
 export const STAFF_MAX_AGE = 60 * 60 * 24 * 30;
 export const REGIONAL_MAX_AGE = 60 * 60 * 24 * 14;
+export const PENDING_MAX_AGE = 60 * 10;
 
 const encoder = new TextEncoder();
 
@@ -61,22 +83,31 @@ async function sign(secret: string, msg: string): Promise<string> {
   return toHex(sig);
 }
 
-// Staff cookies keep their v2 message, so sessions issued before the regional
-// kind existed stay valid.
-const staffMessage = (role: Role) => `propia-admin:v2:${role}`;
-const regionalMessage = (id: string, version: number) =>
-  `propia-admin:v3:regional:${id}:${version}`;
+// Password cookies keep their v2 message, so sessions issued before the
+// phone login existed stay valid (while their role is in PASSWORD_ROLES).
+const passwordMessage = (role: Role) => `propia-admin:v2:${role}`;
+const personaMessage = (prefix: "regional" | "equipo", id: string, version: number) =>
+  `propia-admin:v3:${prefix}:${id}:${version}`;
+const pendingMessage = (id: string, version: number, exp: number) =>
+  `propia-admin:v3:codigo:${id}:${version}:${exp}`;
 
 export async function createSessionToken(role: Role, secret: string): Promise<string> {
-  return `${role}.${await sign(secret, staffMessage(role))}`;
+  return `${role}.${await sign(secret, passwordMessage(role))}`;
 }
 
-export async function createRegionalToken(
+export async function createPersonaToken(
+  equipo: boolean,
   accessId: string,
   version: number,
   secret: string,
 ): Promise<string> {
-  return `regional:${accessId}:${version}.${await sign(secret, regionalMessage(accessId, version))}`;
+  const prefix = equipo ? "equipo" : "regional";
+  return `${prefix}:${accessId}:${version}.${await sign(secret, personaMessage(prefix, accessId, version))}`;
+}
+
+export async function createPendingToken(accessId: string, version: number, secret: string): Promise<string> {
+  const exp = Date.now() + PENDING_MAX_AGE * 1000;
+  return `${accessId}:${version}:${exp}.${await sign(secret, pendingMessage(accessId, version, exp))}`;
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -88,28 +119,47 @@ function equal(a: string, b: string): boolean {
   return diff === 0;
 }
 
+function split(token: string | undefined): [string, string] | null {
+  if (!token) return null;
+  const dot = token.lastIndexOf(".");
+  return dot < 0 ? null : [token.slice(0, dot), token.slice(dot + 1)];
+}
+
 // The session a cookie proves, or null. Constant-time compare. Signature only:
-// whether a regional grant is still alive is lib/access.ts's job.
+// whether a grant is still alive is lib/session.ts's job.
 export async function verifySessionToken(
   token: string | undefined,
   secret: string,
 ): Promise<Session | null> {
-  if (!token || !secret) return null;
-  const dot = token.lastIndexOf(".");
-  if (dot < 0) return null;
-  const payload = token.slice(0, dot);
-  const sig = token.slice(dot + 1);
+  const parts = split(token);
+  if (!parts || !secret) return null;
+  const [payload, sig] = parts;
 
-  if (payload.startsWith("regional:")) {
-    const [, id, v] = payload.split(":");
+  if (payload.startsWith("regional:") || payload.startsWith("equipo:")) {
+    const [prefix, id, v] = payload.split(":") as ["regional" | "equipo", string, string];
     const version = Number(v);
     if (!UUID.test(id ?? "") || !Number.isInteger(version) || version < 1) return null;
-    return equal(sig, await sign(secret, regionalMessage(id, version)))
-      ? { kind: "regional", accessId: id, version }
+    return equal(sig, await sign(secret, personaMessage(prefix, id, version)))
+      ? { kind: "persona", equipo: prefix === "equipo", accessId: id, version }
       : null;
   }
 
   const role = payload as Role;
-  if (!ROLES.includes(role)) return null;
-  return equal(sig, await sign(secret, staffMessage(role))) ? { kind: "staff", role } : null;
+  if (!ROLES.includes(role) || !PASSWORD_ROLES.includes(role)) return null;
+  return equal(sig, await sign(secret, passwordMessage(role))) ? { kind: "password", role } : null;
+}
+
+export async function verifyPendingToken(
+  token: string | undefined,
+  secret: string,
+): Promise<{ accessId: string; version: number } | null> {
+  const parts = split(token);
+  if (!parts || !secret) return null;
+  const [payload, sig] = parts;
+  const [id, v, e] = payload.split(":");
+  const version = Number(v);
+  const exp = Number(e);
+  if (!UUID.test(id ?? "") || !Number.isInteger(version) || !Number.isFinite(exp)) return null;
+  if (exp < Date.now()) return null;
+  return equal(sig, await sign(secret, pendingMessage(id, version, exp))) ? { accessId: id, version } : null;
 }
