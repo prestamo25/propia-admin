@@ -6,6 +6,17 @@ import { FilterChip, PillSearch, PillSegment, PillSelect, PillTray, Toolbar, Too
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { BrokerRow } from "@/lib/data";
+
+// What the table needs of a member. The rest of BrokerRow (WhatsApp opt-in,
+// storage, plan source/expiry) only feeds the Excel export, which reads it on
+// the server — so it never crosses to the browser (2026-10-13: the page had
+// grown to 10 MB).
+export type MemberRow = Omit<BrokerRow, "whatsapp_opt_in" | "mb_used" | "plan_source" | "plan_expires_at">;
+
+// Rows drawn at a time. The whole list stays in memory so search, filters,
+// counts and sorting are instant; only drawing is incremental — drawing all
+// 1,643 members in both layouts was 9 MB of HTML before the page could open.
+const PAGE = 100;
 import { BlockButton } from "@/components/BlockButton";
 import { StatCard } from "@/components/StatCard";
 import {
@@ -145,7 +156,7 @@ export function BrokerTable({
   stats,
   limited = null,
 }: {
-  brokers: BrokerRow[];
+  brokers: MemberRow[];
   /** Numbers for the four cards above the table (computed on the server). */
   stats: MemberStats;
   limited?: { estados: string[] } | null;
@@ -238,6 +249,26 @@ export function BrokerTable({
       }
     });
   }, [brokers, filters, sortKey, sortDir]);
+
+  // How many rows are drawn, for THIS filter + sort: a new filter or sort
+  // starts again at PAGE without an effect (the count is keyed to it).
+  const view = JSON.stringify([filters, sortKey, sortDir]);
+  const [drawn, setDrawn] = useState({ view, n: PAGE });
+  const shown = drawn.view === view ? drawn.n : PAGE;
+  const visible = rows.length > shown ? rows.slice(0, shown) : rows;
+  const more = rows.length - visible.length;
+  const showMore = useCallback(() => setDrawn({ view, n: shown + PAGE }), [view, shown]);
+  // Draw the next batch when the end of the list scrolls into view.
+  const sentinel = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = sentinel.current;
+    if (!el || more <= 0) return;
+    const io = new IntersectionObserver((entries) => {
+      if (entries.some((e) => e.isIntersecting)) showMore();
+    }, { rootMargin: "600px" });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [more, showMore]);
 
   function toggleSort(key: SortKey) {
     if (key === sortKey) {
@@ -336,7 +367,7 @@ export function BrokerTable({
       {/* Phones and narrow windows: stacked cards. The table needs ~880px, so it
           starts at 940px — it never scrolls sideways inside its card. */}
       <ul className="divide-y divide-neutral-50 min-[940px]:hidden">
-        {rows.map((b) => {
+        {visible.map((b) => {
           const c = avatarColors(b.name);
           const s = statusMeta(b.status);
           const act = relative(b.last_active);
@@ -480,7 +511,7 @@ export function BrokerTable({
             </tr>
           </thead>
           <tbody>
-            {rows.map((b) => {
+            {visible.map((b) => {
               const c = avatarColors(b.name);
               const act = relative(b.last_active);
               const flag = exceptionBadge(b.status, b.blocked);
@@ -623,9 +654,17 @@ export function BrokerTable({
         </table>
       </div>
         </div>
-        {limited ? null : (
-          <p className="mt-4 text-xs text-neutral-400">MB = almacenamiento en R2 (pendiente de conectar).</p>
-        )}
+        {more > 0 ? (
+          <div ref={sentinel} className="mt-4 flex justify-center">
+            <button
+              type="button"
+              onClick={showMore}
+              className="rounded-lg px-4 py-2 text-sm font-medium text-neutral-600 ring-1 ring-neutral-200 transition hover:bg-white hover:text-neutral-900"
+            >
+              Mostrar {Math.min(more, PAGE)} más · faltan {n(more)}
+            </button>
+          </div>
+        ) : null}
       </main>
     </div>
   );

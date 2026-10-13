@@ -1,5 +1,5 @@
 import { fetchOverview, type BrokerRow } from "@/lib/data";
-import { BrokerTable, type MemberStats } from "@/components/BrokerTable";
+import { BrokerTable, type MemberRow, type MemberStats } from "@/components/BrokerTable";
 import { TopNav } from "@/components/TopNav";
 import { requireViewer, type Access } from "@/lib/access";
 import { tierOf } from "@/lib/profileTypes";
@@ -8,7 +8,7 @@ import { isTeamAccount } from "@/lib/team";
 // Cards you'd act on (2026-09-28) — the old ones (Miembros / Aprobados /
 // Pendientes / Propiedades) repeated the tab counts: 1,536 of 1,537 are
 // approved, and pending already has its badge on «Aprobaciones».
-function memberStats(brokers: BrokerRow[]): MemberStats {
+function memberStats(brokers: MemberRow[]): MemberStats {
   const now = Date.now();
   const within = (iso: string | null, days: number) =>
     !!iso && now - new Date(iso).getTime() <= days * 86_400_000;
@@ -20,6 +20,16 @@ function memberStats(brokers: BrokerRow[]): MemberStats {
   };
 }
 
+// Only what the table draws crosses to the browser (BrokerTable's MemberRow).
+function toRow(b: BrokerRow): MemberRow {
+  const row: Partial<BrokerRow> = { ...b };
+  delete row.whatsapp_opt_in;
+  delete row.mb_used;
+  delete row.plan_source;
+  delete row.plan_expires_at;
+  return row as MemberRow;
+}
+
 // Acceso regional (Pablo 2026-10-13: «the members only chihuahua»): approved,
 // unblocked asesores and service providers — the people the app itself shows
 // the network; clientes and invitados never appear in its directory — who
@@ -29,7 +39,7 @@ function memberStats(brokers: BrokerRow[]): MemberStats {
 // BrokerTable is readable in the page payload, hidden or not. No email, plan
 // or premium, WhatsApp opt-in, devices or block state; the phone only if the
 // grant says so (the app already lets any broker reach any other on WhatsApp).
-function forRegional(brokers: BrokerRow[], a: Access): BrokerRow[] {
+function forRegional(brokers: BrokerRow[], a: Access): MemberRow[] {
   return brokers
     .filter(
       (b) =>
@@ -40,15 +50,11 @@ function forRegional(brokers: BrokerRow[], a: Access): BrokerRow[] {
         b.states.some((s) => a.estados.includes(s)),
     )
     .map((b) => ({
-      ...b,
+      ...toRow(b),
       phone: a.verTelefonos ? b.phone : null,
       email: null,
-      whatsapp_opt_in: false,
-      mb_used: null,
       premium: false,
       comped: false,
-      plan_source: null,
-      plan_expires_at: null,
       platforms: [],
     }));
 }
@@ -76,7 +82,7 @@ export default async function DashboardPage() {
     );
   }
 
-  const brokers = viewer.kind === "regional" ? forRegional(data.brokers, viewer.access) : data.brokers;
+  const brokers = viewer.kind === "regional" ? forRegional(data.brokers, viewer.access) : data.brokers.map(toRow);
 
   return (
     <div className="flex min-h-screen flex-col">
