@@ -23,10 +23,12 @@ export const PENDING_COOKIE = "padmin_codigo";
 export type Role = "admin" | "mariana" | "dev";
 const ROLES: Role[] = ["admin", "mariana", "dev"];
 
-// Passwords still accepted. Fase 1 (2026-10-13): all three, side by side with
-// the phone login. Fase 2, once Pablo and Mariana have signed in the new way:
-// ["dev"] only — Franz's emergency password.
-export const PASSWORD_ROLES: Role[] = ["admin", "mariana", "dev"];
+// Passwords still accepted. Fase 1 (2026-10-13 morning): all three, side by
+// side with the phone login. Fase 2 (Franz 2026-10-13: «you can switch off
+// their passwords»): only Franz's técnico password, as the emergency way in
+// («Acceso de emergencia» on the login screen). Pablo's and Mariana's password
+// cookies stopped validating at that deploy: they sign in by phone now.
+export const PASSWORD_ROLES: Role[] = ["dev"];
 
 // admin_access.rol → the tier the rest of the panel already gates on: the
 // dueño is the superuser (técnico screens included), Pablo is admin, Mariana
