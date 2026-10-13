@@ -3,7 +3,6 @@ import { countOpenReports } from "@/lib/reports";
 import { countPendingUsers } from "@/lib/aprobaciones";
 import { countPendingVerifications } from "@/lib/verificaciones";
 import { getAccess, getRole } from "@/lib/session";
-import { ROL_LABEL } from "@/lib/auth";
 import { MobileNav } from "@/components/MobileNav";
 import {
   countFor,
@@ -58,7 +57,8 @@ const chevron = (
 export async function TopNav({ active }: { active: NavKey }) {
   // A regional viewer (acceso regional, 2026-10-13) gets their own sections,
   // their estado as the badge, and none of the team's queue counts. A team
-  // phone login shows who it is («Pablo · Admin»).
+  // phone login shows just the person's name (Franz 10-13: no «Dueño» there);
+  // the role only colors it.
   const access = await getAccess();
   const regional = access?.rol === "regional" ? access : null;
   const [openReports, pendingUsers, pendingVerifications, role] = regional
@@ -82,7 +82,7 @@ export async function TopNav({ active }: { active: NavKey }) {
   const roleBadge = regional
     ? { label: regional.estados.join(" · "), cls: "bg-amber-100 text-amber-800" }
     : access
-      ? { label: `${access.nombreCorto} · ${ROL_LABEL[access.rol]}`, cls: tone }
+      ? { label: access.nombreCorto, cls: tone }
       : role === "dev"
         ? { label: "Técnico", cls: tone }
         : role === "mariana"
