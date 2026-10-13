@@ -1,22 +1,21 @@
 import { NextResponse } from "next/server";
 import { fetchMapaColonias } from "@/lib/mapaZonas";
-import { getRole } from "@/lib/session";
-import { roleCan } from "@/lib/auth";
+import { apiViewer, canSeeEstado } from "@/lib/access";
 
-// INEGI colonia outlines inside the current viewport (bbox = w,s,e,n).
+// INEGI colonia outlines inside the current viewport (bbox = w,s,e,n). A
+// regional viewer only for their own estados.
 export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
-  const role = await getRole();
-  if (!role || !roleCan(role, "admin")) {
-    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-  }
+  const viewer = await apiViewer("zonas");
+  if (!viewer) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   const { searchParams } = new URL(req.url);
   const estado = searchParams.get("estado");
   const bbox = (searchParams.get("bbox") ?? "").split(",").map(Number);
   if (!estado || bbox.length !== 4 || bbox.some((v) => !Number.isFinite(v))) {
     return NextResponse.json({ error: "Faltan estado o bbox" }, { status: 400 });
   }
+  if (!canSeeEstado(viewer, estado)) return NextResponse.json({ error: "No autorizado" }, { status: 403 });
   try {
     return NextResponse.json(
       await fetchMapaColonias(estado, bbox as [number, number, number, number]),

@@ -25,7 +25,8 @@ export type NavKey =
   | "mapa"
   | "ubicaciones"
   | "avisos"
-  | "rifas";
+  | "rifas"
+  | "accesos";
 
 export type NavCounts = { pendingUsers: number; openReports: number; pendingVerifications: number };
 
@@ -96,6 +97,8 @@ export const NAV: NavEntry[] = [
       { key: "salidas", href: "/salidas", label: "Salidas" },
       { key: "mapa", href: "/mapa", label: "Mapa" },
       { key: "zonas", href: "/zonas", label: "Zonas" },
+      // Acceso regional (2026-10-13): who outside the team sees what.
+      { key: "accesos", href: "/accesos", label: "Accesos" },
     ],
   },
   {
@@ -112,8 +115,23 @@ export const NAV: NavEntry[] = [
   },
 ];
 
-export const navFor = (isDev: boolean) =>
-  NAV.filter((e) => e.kind === "link" || !e.devOnly || isDev);
+// canGrant: Accesos is for the people who hand out access (admin + dev, not
+// Mariana's tier-mate password).
+export const navFor = (isDev: boolean, canGrant = isDev): NavEntry[] =>
+  NAV.filter((e) => e.kind === "link" || !e.devOnly || isDev).map((e) =>
+    e.kind === "group" && !canGrant ? { ...e, items: e.items.filter((l) => l.key !== "accesos") } : e,
+  );
+
+// A regional viewer (acceso regional, 2026-10-13) gets only the sections in
+// their grant, as plain tabs. Section names are lib/access.ts's Seccion —
+// spelled out here because this module also runs in the browser.
+const REGIONAL_LINKS: Record<string, NavLink> = {
+  mapa: { key: "mapa", href: "/mapa", label: "Mapa" },
+  zonas: { key: "zonas", href: "/zonas", label: "Zonas" },
+  miembros: { key: "brokers", href: "/brokers", label: "Miembros" },
+};
+export const navForRegional = (secciones: string[]): NavEntry[] =>
+  secciones.flatMap((s) => (REGIONAL_LINKS[s] ? [{ kind: "link" as const, ...REGIONAL_LINKS[s] }] : []));
 
 export const countFor = (l: NavLink, counts: NavCounts) =>
   l.badge ? counts[l.badge] : 0;

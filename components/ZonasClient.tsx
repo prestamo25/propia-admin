@@ -104,14 +104,20 @@ const outsideClusters = {
   },
 };
 
+// `readOnly` = a regional viewer (acceso regional, 2026-10-13): the map, the
+// zone list and the zone cards, nothing else — no editor, no «Nueva zona», and
+// none of the work queues (Propuestas, Sin resolver, Por ubicar, verdicts),
+// which aren't even fetched (their APIs refuse a regional session anyway).
 export function ZonasClient({
   states,
   listings,
   demand,
+  readOnly = false,
 }: {
   states: string[];
   listings: ZonaPoint[];
   demand: DemandPoint[];
+  readOnly?: boolean;
 }) {
   const mapEl = useRef<HTMLDivElement>(null);
   const map = useRef<google.maps.Map | null>(null);
@@ -133,7 +139,9 @@ export function ZonasClient({
   const [zonas, setZonas] = useState<MapZona[] | null>(null);
   const [zLoading, setZLoading] = useState(!!estado);
   const [zError, setZError] = useState<string | null>(null);
-  const [kinds, setKinds] = useState<Record<ZonaKind, boolean>>({ curada: true, familia: true, google: false });
+  // A viewer outside the team sees the Google boxes too: in a state with no
+  // hand-made zones yet (Chihuahua, 2026-10) they're all there is.
+  const [kinds, setKinds] = useState<Record<ZonaKind, boolean>>({ curada: true, familia: true, google: readOnly });
   // on by default (Franz 09-23): the INEGI lines are the base the zones sit on
   const [showColonias, setShowColonias] = useState(true);
   const [coloniasNote, setColoniasNote] = useState<string | null>(null);
@@ -149,9 +157,10 @@ export function ZonasClient({
   const [flash, setFlash] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [reloadTick, setReloadTick] = useState(0);
-  const [pendientes, setPendientes] = useState<Failure[] | null>(null);
-  const [propuestas, setPropuestas] = useState<Propuesta[] | null>(null);
-  const [porUbicar, setPorUbicar] = useState<PorUbicar[] | null>(null);
+  // A read-only viewer never loads the work queues: they start (and stay) empty.
+  const [pendientes, setPendientes] = useState<Failure[] | null>(readOnly ? [] : null);
+  const [propuestas, setPropuestas] = useState<Propuesta[] | null>(readOnly ? [] : null);
+  const [porUbicar, setPorUbicar] = useState<PorUbicar[] | null>(readOnly ? [] : null);
   const [verifList, setVerifList] = useState<Verificacion[]>([]);
   const [tab, setTab] = useState<PanelTab>("zonas");
   // every colonia geometry seen (viewport, members, candidates) — a pick
@@ -204,6 +213,7 @@ export function ZonasClient({
 
   useEffect(() => {
     if (!estado) return;
+    if (readOnly) return;
     const ac = new AbortController();
     fetch(`/api/zonas/pendientes?estado=${encodeURIComponent(estado)}&t=${reloadTick}`, { signal: ac.signal })
       .then((r) => (r.ok ? r.json() : []))
@@ -212,10 +222,11 @@ export function ZonasClient({
         if (!ac.signal.aborted) setPendientes([]);
       });
     return () => ac.abort();
-  }, [estado, reloadTick]);
+  }, [estado, reloadTick, readOnly]);
 
   useEffect(() => {
     if (!estado) return;
+    if (readOnly) return;
     const ac = new AbortController();
     fetch(`/api/zonas/propuestas?estado=${encodeURIComponent(estado)}&t=${reloadTick}`, { signal: ac.signal })
       .then((r) => (r.ok ? r.json() : []))
@@ -224,10 +235,11 @@ export function ZonasClient({
         if (!ac.signal.aborted) setPropuestas([]);
       });
     return () => ac.abort();
-  }, [estado, reloadTick]);
+  }, [estado, reloadTick, readOnly]);
 
   useEffect(() => {
     if (!estado) return;
+    if (readOnly) return;
     const ac = new AbortController();
     fetch(`/api/zonas/por-ubicar?estado=${encodeURIComponent(estado)}&t=${reloadTick}`, { signal: ac.signal })
       .then((r) => (r.ok ? r.json() : []))
@@ -236,10 +248,11 @@ export function ZonasClient({
         if (!ac.signal.aborted) setPorUbicar([]);
       });
     return () => ac.abort();
-  }, [estado, reloadTick]);
+  }, [estado, reloadTick, readOnly]);
 
   useEffect(() => {
     if (!estado) return;
+    if (readOnly) return;
     const ac = new AbortController();
     fetch(`/api/zonas/verificaciones?estado=${encodeURIComponent(estado)}&t=${reloadTick}`, { signal: ac.signal })
       .then((r) => (r.ok ? r.json() : []))
@@ -248,7 +261,7 @@ export function ZonasClient({
         if (!ac.signal.aborted) setVerifList([]);
       });
     return () => ac.abort();
-  }, [estado, reloadTick]);
+  }, [estado, reloadTick, readOnly]);
   const verifs = useMemo(() => new Map(verifList.map((v) => [v.zid, v])), [verifList]);
 
   const shapes = useMemo(() => new Map((zonas ?? []).map((z) => [z.key, shapeOf(z.geom)])), [zonas]);
@@ -1026,18 +1039,20 @@ export function ZonasClient({
                 title="Los polígonos oficiales de lo que está a la vista. Gris = se reconoce por su nombre; ámbar = el nombre se repite en el estado."
                 swatch={<span className="inline-block h-3 w-3 rounded-sm border border-dashed border-neutral-500" />}
               />
-              <LayerPill
-                on={fuera}
-                onClick={() => setFuera((v) => !v)}
-                label="Por ubicar"
-                count={porUbicar?.filter((p) => p.lat != null).length ?? 0}
-                title="Propiedades con pin cuya ubicación necesita revisión, en rojo. La lista completa está en la pestaña «Por ubicar»."
-                swatch={<span className="inline-block h-2.5 w-2.5 rounded-full bg-rose-600" />}
-              />
+              {readOnly ? null : (
+                <LayerPill
+                  on={fuera}
+                  onClick={() => setFuera((v) => !v)}
+                  label="Por ubicar"
+                  count={porUbicar?.filter((p) => p.lat != null).length ?? 0}
+                  title="Propiedades con pin cuya ubicación necesita revisión, en rojo. La lista completa está en la pestaña «Por ubicar»."
+                  swatch={<span className="inline-block h-2.5 w-2.5 rounded-full bg-rose-600" />}
+                />
+              )}
             </div>
           ) : null}
         </div>
-        {zonas ? (
+        {zonas && !readOnly ? (
           <button
             type="button"
             onClick={startNew}
@@ -1098,6 +1113,7 @@ export function ZonasClient({
           className={`${panelOpen ? "absolute inset-y-0 right-0 z-20 flex w-[min(400px,100%)] shadow-xl" : "hidden"} lg:static lg:flex lg:w-[400px] lg:shadow-none`}
         >
           <ZonasPanel
+            readOnly={readOnly}
             estado={estado}
             zonas={zonas}
             loading={zLoading}

@@ -6,6 +6,7 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getRole } from "@/lib/session";
 import { roleCan } from "@/lib/auth";
 import { PROFILE_TYPE_LABEL } from "@/lib/profileTypes";
+import { TEAM_ACCOUNT_IDS } from "@/lib/team";
 import {
   CANONICAL_PAIRS,
   RESCUE_OTP,
@@ -18,11 +19,22 @@ const BAN_DURATION = "876600h";
 
 type Result = { error?: string };
 
+// Every action here writes to production or reads private data. The proxy
+// only proves *a* session exists — and since 2026-10-13 a regional viewer's
+// session is one too — so each action checks the staff tier itself, whatever
+// screen it was called from. getRole() is null for a regional session.
+async function denied(): Promise<string | null> {
+  const role = await getRole();
+  return role && roleCan(role, "admin") ? null : "No autorizado.";
+}
+
 // Block a broker at the AUTH layer: they can no longer sign in or refresh their
 // session. (Their current access token stays valid until it expires — Supabase
 // can't revoke an already-issued JWT — so worst case they're fully out within
 // the token lifetime, and immediately on the app's next cold start.)
 export async function blockBroker(id: string): Promise<Result> {
+  const no = await denied();
+  if (no) return { error: no };
   if (!id) return { error: "Falta el id." };
   const sb = supabaseAdmin();
   const { error } = await sb.auth.admin.updateUserById(id, {
@@ -45,6 +57,8 @@ async function reviewer(): Promise<string> {
 // row over Realtime, so the member's phone flips to "¡Listo!" live; the DB
 // trigger also mirrors the decision to WhatsApp (cuenta_aprobada).
 export async function approveUser(id: string): Promise<Result> {
+  const no = await denied();
+  if (no) return { error: no };
   if (!id) return { error: "Falta el id." };
   const sb = supabaseAdmin();
   const { error } = await sb
@@ -75,6 +89,8 @@ export async function setUserPlan(
   motivo: PlanMotivo | "quitar" = "otro",
   note: string | null = null,
 ): Promise<Result> {
+  const no = await denied();
+  if (no) return { error: no };
   if (!id) return { error: "Falta el id." };
   if (plan !== "free" && plan !== "premium") return { error: "Plan inválido." };
   let expires: string | null = null;
@@ -108,6 +124,8 @@ export async function setUserPlan(
 // type; the tier gates key off profile_type, and the app lands them on the
 // right tab on its next check. Works on pending AND rejected rows.
 export async function approveUserAs(id: string, profileType: string): Promise<Result> {
+  const no = await denied();
+  if (no) return { error: no };
   if (!id) return { error: "Falta el id." };
   if (!(profileType in PROFILE_TYPE_LABEL)) return { error: "Tipo de perfil inválido." };
   const sb = supabaseAdmin();
@@ -129,6 +147,8 @@ export async function approveUserAs(id: string, profileType: string): Promise<Re
 // Reject a pending account. status='rejected' + the reason the applicant is
 // shown. Reversible: re-approving simply sets status back and clears it.
 export async function rejectUser(id: string, reason: string): Promise<Result> {
+  const no = await denied();
+  if (no) return { error: no };
   if (!id) return { error: "Falta el id." };
   const clean = reason.trim();
   if (clean.length < 3) return { error: "Escribe un motivo." };
@@ -143,6 +163,8 @@ export async function rejectUser(id: string, reason: string): Promise<Result> {
 }
 
 export async function unblockBroker(id: string): Promise<Result> {
+  const no = await denied();
+  if (no) return { error: no };
   if (!id) return { error: "Falta el id." };
   const sb = supabaseAdmin();
   const { error } = await sb.auth.admin.updateUserById(id, {
@@ -157,6 +179,8 @@ export async function setReportStatus(
   id: string,
   status: "open" | "actioned" | "dismissed",
 ): Promise<Result> {
+  const no = await denied();
+  if (no) return { error: no };
   if (!id) return { error: "Falta el id." };
   const sb = supabaseAdmin();
   const { error } = await sb.from("reports").update({ status }).eq("id", id);
@@ -178,6 +202,8 @@ export async function listRescuePairs(): Promise<{
   pairs?: RescuePair[];
   error?: string;
 }> {
+  const no = await denied();
+  if (no) return { error: no };
   try {
     const cfg = await getOtpConfig();
     const phones = [...cfg.pairs.keys()].filter((p) => !CANONICAL_PAIRS.has(p));
@@ -215,6 +241,8 @@ export async function listRescuePairs(): Promise<{
 export async function addRescuePair(
   phone10: string,
 ): Promise<{ error?: string; already?: boolean }> {
+  const no = await denied();
+  if (no) return { error: no };
   const digits = phone10.replace(/\D/g, "");
   if (digits.length !== 10)
     return { error: "El teléfono debe tener 10 dígitos." };
@@ -241,6 +269,8 @@ export async function addRescuePair(
 }
 
 export async function removeRescuePair(phone10: string): Promise<Result> {
+  const no = await denied();
+  if (no) return { error: no };
   const digits = phone10.replace(/\D/g, "");
   const phone = `52${digits}`;
   if (CANONICAL_PAIRS.has(phone))
@@ -294,6 +324,8 @@ export async function createBroker(
   mode: PinMode = "temp",
   chosenPin?: string,
 ): Promise<AltaResult> {
+  const no = await denied();
+  if (no) return { error: no };
   // Names are optional: an empty name routes the broker through onboarding
   // after the (forced) PIN step, so they type their own.
   const first = firstName.trim();
@@ -502,6 +534,8 @@ export async function ignorarNombre(estado: string, nombre: string): Promise<Res
 // original map pick (place_id) is cleared — a human just overruled it. Keeping
 // closes the case so the sweep never raises it again.
 export async function acceptGeoReview(id: string): Promise<Result> {
+  const no = await denied();
+  if (no) return { error: no };
   if (!id) return { error: "Falta el id." };
   const sb = supabaseAdmin();
   const { data: row, error } = await sb
@@ -547,6 +581,8 @@ export async function acceptGeoReview(id: string): Promise<Result> {
 }
 
 export async function keepGeoReview(id: string): Promise<Result> {
+  const no = await denied();
+  if (no) return { error: no };
   if (!id) return { error: "Falta el id." };
   const sb = supabaseAdmin();
   const { error } = await sb
@@ -668,21 +704,7 @@ export async function sendBroadcast(input: {
 // ganador (nombre + celular) y manda de vuelta los ids que ya ganaron para no
 // repetirlos. Ni la lista ni el conteo viajan al cliente.
 // El equipo de Propia nunca entra a una rifa, sea o no staff del evento
-// (Franz 2026-09-24): Franz («Propia Broker»), Pablo, las dos cuentas de
-// Mariana y las cuentas PROPIA STAFF / de prueba.
-const RAFFLE_EXCLUDED_USERS = [
-  "15fef8d4-0384-4d50-89c5-059c93e9003d", // Propia Broker (Franz)
-  "fb561d43-ae89-4d96-b045-046edaad2eb3", // Pablo Prestamo
-  "71788077-d110-409a-b730-8825cffb603a", // Mariana Figueroa
-  "4d4415af-5003-4ff5-ac45-96b5d2422c73", // Mariana Figueroa (2ª cuenta)
-  "6334f20b-4414-45ed-b051-268d4acbf85b", // Staff Propia 01
-  "2af0bc92-a4ec-4841-a3fa-753fd8b1d0f2", // STAFF 2 PROPIA
-  "d8532244-1eba-4a4a-9fc0-e60fcfa65dc2", // PROPIA STAFF 03
-  "13258141-17d5-4e52-bf31-4037a894ad54", // PROPIA STAFF 04
-  "062964a1-7d32-490f-a259-857179378ff0", // PROPIA STAFF 5
-  "8a17d9fa-967b-4bf4-96c6-047242a3569b", // PROPIA STAFF 06
-  "9880d781-7270-419a-a024-7acfe64e1122", // Broker Test
-];
+// (Franz 2026-09-24) — la lista vive en lib/team.ts.
 
 export type RifaPool = "attended" | "registered";
 export type RifaWinner = {
@@ -726,7 +748,7 @@ export async function drawRaffleWinner(input: {
   const hosts = [
     ev?.created_by,
     ...(staff ?? []).map((s) => s.user_id),
-    ...RAFFLE_EXCLUDED_USERS,
+    ...TEAM_ACCOUNT_IDS,
   ].filter(Boolean) as string[];
   const hostIds = new Set<string>();
   if (hosts.length) {
@@ -781,6 +803,8 @@ async function decideVerification(
   status: "verified" | "rejected" | "revoked",
   reason: string | null,
 ): Promise<Result> {
+  const no = await denied();
+  if (no) return { error: no };
   if (!id) return { error: "Falta el id." };
   const clean = reason?.trim() ?? "";
   if (status !== "verified" && clean.length < 3) return { error: "Escribe un motivo." };

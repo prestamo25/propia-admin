@@ -63,6 +63,7 @@ export const TIPO_PROPUESTA: Record<PropuestaTipo, string> = {
 };
 
 export function ZonasPanel({
+  readOnly = false,
   estado,
   zonas,
   loading,
@@ -118,10 +119,14 @@ export function ZonasPanel({
   /** re-point a Google box's requerimientos per its verdict */
   onReplace: (oldKey: string, newKey: string, verifId: number) => void;
   pending: boolean;
+  /** regional viewer: the zone list and cards only (ZonasClient) */
+  readOnly?: boolean;
 }) {
   const [q, setQ] = useState("");
   const setTab = onTab;
-  const [open, setOpen] = useState<Record<ZonaKind, boolean>>({ curada: true, familia: true, google: false });
+  // A regional viewer sees the Google list open: in a state with no hand-made
+  // zones yet it is all there is (same as the map layer, ZonasClient).
+  const [open, setOpen] = useState<Record<ZonaKind, boolean>>({ curada: true, familia: true, google: readOnly });
 
   const byKey = useMemo(() => new Map((zonas ?? []).map((z) => [z.key, z])), [zonas]);
   const sel = selected ? byKey.get(selected) ?? null : null;
@@ -179,11 +184,18 @@ export function ZonasPanel({
         ) : error ? (
           <p className="mt-1 text-sm text-rose-600">{error}</p>
         ) : zonas ? (
-          <div className="mt-2.5 grid grid-cols-3 divide-x divide-neutral-100 rounded-xl border border-neutral-200">
-            <Kpi value={`${pct}%`} label="propiedades en zona" title={`${coverage.dentro.toLocaleString("en-US")} de ${coverage.total.toLocaleString("en-US")} con ubicación`} />
-            <Kpi value={String(nPorRevisar)} label="por revisar" tone={nPorRevisar ? "amber" : undefined} title="Veredictos de la verificación que todavía no se aplican" />
-            <Kpi value={String(nTraslapes)} label="traslapes" tone={nTraslapes ? "amber" : undefined} title="Zonas que se traslapan sin que una contenga a la otra" />
-          </div>
+          readOnly ? (
+            <div className="mt-2.5 grid grid-cols-2 divide-x divide-neutral-100 rounded-xl border border-neutral-200">
+              <Kpi value={`${pct}%`} label="propiedades en zona" title={`${coverage.dentro.toLocaleString("en-US")} de ${coverage.total.toLocaleString("en-US")} con ubicación`} />
+              <Kpi value={String(zonas.length)} label={zonas.length === 1 ? "zona" : "zonas"} />
+            </div>
+          ) : (
+            <div className="mt-2.5 grid grid-cols-3 divide-x divide-neutral-100 rounded-xl border border-neutral-200">
+              <Kpi value={`${pct}%`} label="propiedades en zona" title={`${coverage.dentro.toLocaleString("en-US")} de ${coverage.total.toLocaleString("en-US")} con ubicación`} />
+              <Kpi value={String(nPorRevisar)} label="por revisar" tone={nPorRevisar ? "amber" : undefined} title="Veredictos de la verificación que todavía no se aplican" />
+              <Kpi value={String(nTraslapes)} label="traslapes" tone={nTraslapes ? "amber" : undefined} title="Zonas que se traslapan sin que una contenga a la otra" />
+            </div>
+          )
         ) : null}
         {flash ? (
           <p className="mt-2.5 rounded-lg bg-emerald-50 px-2.5 py-1.5 text-[13px] leading-5 text-emerald-800 ring-1 ring-emerald-100">{flash}</p>
@@ -203,13 +215,14 @@ export function ZonasPanel({
           verif={verifs.get(`z:${sel.key}`) ?? null}
           onReplace={onReplace}
           pending={pending}
+          readOnly={readOnly}
         />
       ) : null}
 
       {estado && zonas ? (
         <div className="flex min-h-0 flex-1 flex-col">
-          {/* tabs: one track, four equal segments */}
-          <div className="px-3 pt-3">
+          {/* tabs: one track, four equal segments (none for a regional viewer) */}
+          <div className={readOnly ? "hidden" : "px-3 pt-3"}>
             <div className="grid grid-cols-4 gap-1 rounded-xl bg-neutral-100 p-1">
               {(
                 [
@@ -356,6 +369,7 @@ function ZoneCard({
   verif,
   onReplace,
   pending,
+  readOnly,
 }: {
   z: MapZona;
   byKey: Map<string, MapZona>;
@@ -367,6 +381,7 @@ function ZoneCard({
   verif: Verificacion | null;
   onReplace: (oldKey: string, newKey: string, verifId: number) => void;
   pending: boolean;
+  readOnly: boolean;
 }) {
   const padre = z.padre ? byKey.get(z.padre) : null;
   const hijos = zonas.filter((o) => o.padre === z.key);
@@ -413,7 +428,7 @@ function ZoneCard({
           <li>
             Usada por <b>{z.requerimientos}</b> requerimiento{z.requerimientos === 1 ? "" : "s"} abierto
             {z.requerimientos === 1 ? "" : "s"}
-            {z.kind === "google" ? " — revisar que el área sea la correcta" : ""}
+            {z.kind === "google" && !readOnly ? " — revisar que el área sea la correcta" : ""}
           </li>
         ) : null}
         {padre ? <li>Dentro de {link(padre)}</li> : null}
@@ -425,7 +440,7 @@ function ZoneCard({
           </li>
         ) : null}
       </ul>
-      {verif ? (
+      {readOnly ? null : verif ? (
         <div className="mt-3">
           <VerificacionBox
             v={verif}
@@ -439,7 +454,7 @@ function ZoneCard({
           />
         </div>
       ) : null}
-      {z.kind === "google" ? (
+      {readOnly ? null : z.kind === "google" ? (
         <p className="mt-3 text-[11px] leading-4 text-neutral-400">
           Las zonas de Google se revisan en la fase 3 (promover, fusionar o borrar).
         </p>

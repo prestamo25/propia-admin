@@ -1,6 +1,6 @@
 import { TopNav } from "@/components/TopNav";
 import { MapaClient } from "@/components/MapaClient";
-import { requireRole } from "@/lib/session";
+import { estadosOf, isRegional, requireViewer } from "@/lib/access";
 import { fetchMapData } from "@/lib/mapa";
 
 export const dynamic = "force-dynamic";
@@ -10,12 +10,15 @@ export const dynamic = "force-dynamic";
 // the client filters in place so the Google map is created exactly once per
 // visit (each map creation is a billed load — free under 10k/month, but only
 // if we don't remount it on every filter change).
+// A regional viewer (2026-10-13) gets their estados only, with every person
+// stripped server-side.
 export default async function MapaPage() {
-  await requireRole("admin");
+  const viewer = await requireViewer("mapa");
+  const limited = isRegional(viewer);
 
   let data;
   try {
-    data = await fetchMapData();
+    data = await fetchMapData({ estados: estadosOf(viewer), redact: limited });
   } catch (e) {
     return (
       <div className="min-h-screen">
@@ -33,7 +36,7 @@ export default async function MapaPage() {
   return (
     <div className="flex min-h-screen flex-col">
       <TopNav active="mapa" />
-      <MapaClient data={data} />
+      <MapaClient data={data} limited={limited} />
     </div>
   );
 }

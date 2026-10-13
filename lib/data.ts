@@ -220,6 +220,11 @@ export type Listing = {
   source: string | null;
   created_at: string | null;
   thumb_url: string | null;
+  // What the network can see: 'network' | 'public' | 'private', and whether
+  // it is live (lifecycle active, not archived). A regional viewer gets only
+  // live, non-private listings (app/broker/[id]).
+  visibility: string | null;
+  live: boolean;
 };
 
 export type BrokerDetail = {
@@ -252,7 +257,7 @@ export async function fetchBroker(id: string): Promise<BrokerDetail | null> {
       sb
         .from("properties")
         .select(
-          "id, name, type, transaction, price, currency, state, bedrooms, bathrooms, address, source, created_at, property_photos(thumb_url, position)",
+          "id, name, type, transaction, price, currency, state, bedrooms, bathrooms, address, source, created_at, visibility, lifecycle, archived_at, property_photos(thumb_url, position)",
         )
         .eq("user_id", id)
         .order("created_at", { ascending: false }),
@@ -293,6 +298,9 @@ export async function fetchBroker(id: string): Promise<BrokerDetail | null> {
       address: string | null;
       source: string | null;
       created_at: string | null;
+      visibility: string | null;
+      lifecycle: string | null;
+      archived_at: string | null;
       property_photos: { thumb_url: string; position: number }[] | null;
     };
     const photos = [...(p.property_photos ?? [])].sort(
@@ -312,6 +320,8 @@ export async function fetchBroker(id: string): Promise<BrokerDetail | null> {
       source: p.source,
       created_at: p.created_at,
       thumb_url: photos[0]?.thumb_url ?? null,
+      visibility: p.visibility,
+      live: p.lifecycle === "active" && !p.archived_at,
     };
   });
 

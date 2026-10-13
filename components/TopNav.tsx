@@ -3,8 +3,16 @@ import { countOpenReports } from "@/lib/reports";
 import { countPendingUsers } from "@/lib/aprobaciones";
 import { countPendingVerifications } from "@/lib/verificaciones";
 import { getRole } from "@/lib/session";
+import { getAccess } from "@/lib/access";
 import { MobileNav } from "@/components/MobileNav";
-import { countFor, navFor, type NavCounts, type NavKey, type NavLink } from "@/lib/nav";
+import {
+  countFor,
+  navFor,
+  navForRegional,
+  type NavCounts,
+  type NavKey,
+  type NavLink,
+} from "@/lib/nav";
 
 // Grouped nav (2026-09-28): Inicio · Miembros · Aprobaciones · Verificaciones (10-06) · Reportes ·
 // Eventos ▾ · Avisos · Datos ▾ · Técnico ▾ — the entries live in lib/nav.ts.
@@ -48,16 +56,24 @@ const chevron = (
 );
 
 export async function TopNav({ active }: { active: NavKey }) {
-  const [openReports, pendingUsers, pendingVerifications, role] = await Promise.all([
-    countOpenReports(),
-    countPendingUsers(),
-    countPendingVerifications(),
-    getRole(),
-  ]);
+  // A regional viewer (acceso regional, 2026-10-13) gets their own sections,
+  // their estado as the badge, and none of the team's queue counts.
+  const access = await getAccess();
+  const [openReports, pendingUsers, pendingVerifications, role] = access
+    ? [0, 0, 0, null]
+    : await Promise.all([
+        countOpenReports(),
+        countPendingUsers(),
+        countPendingVerifications(),
+        getRole(),
+      ]);
   const counts: NavCounts = { openReports, pendingUsers, pendingVerifications };
   const isDev = role === "dev";
-  const roleBadge =
-    role === "dev"
+  const nav = access ? navForRegional(access.secciones) : navFor(isDev, isDev || role === "admin");
+  const home = access ? "/regional" : "/";
+  const roleBadge = access
+    ? { label: access.estados.join(" · "), cls: "bg-amber-100 text-amber-800" }
+    : role === "dev"
       ? { label: "Técnico", cls: "bg-violet-100 text-violet-700" }
       : role === "mariana"
         ? { label: "Mariana", cls: "bg-sky-100 text-sky-700" }
@@ -186,7 +202,7 @@ export async function TopNav({ active }: { active: NavKey }) {
         <div className="flex min-w-0 items-center gap-5">
           <div className="flex shrink-0 items-center gap-2.5">
             <Link
-              href="/"
+              href={home}
               className="flex items-center gap-2.5 transition hover:opacity-80"
               aria-label="Inicio"
             >
@@ -201,13 +217,14 @@ export async function TopNav({ active }: { active: NavKey }) {
               </span>
             </Link>
             <span
+              title={access ? `Acceso de ${access.nombre}` : undefined}
               className={`rounded-md px-1.5 py-0.5 text-[11px] font-medium hidden navmd:inline ${roleBadge.cls}`}
             >
               {roleBadge.label}
             </span>
           </div>
           <nav className="hidden items-center gap-0.5 rounded-xl navmd:gap-1 bg-neutral-200/40 p-1 navsm:flex">
-            {navFor(isDev).map((e) =>
+            {nav.map((e) =>
               e.kind === "link" ? (
                 tab(e)
               ) : e.devOnly ? (
@@ -253,7 +270,7 @@ export async function TopNav({ active }: { active: NavKey }) {
         </div>
         <MobileNav
           active={active}
-          isDev={isDev}
+          nav={nav}
           roleBadge={roleBadge}
           openReports={openReports}
           pendingUsers={pendingUsers}

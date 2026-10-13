@@ -1,3 +1,4 @@
+import { requireRole } from "@/lib/session";
 import { fetchPanorama, type Panorama } from "@/lib/analytics";
 import { fetchShareStats, type ShareStats } from "@/lib/shares";
 import { TopNav } from "@/components/TopNav";
@@ -13,6 +14,7 @@ import { CUM_SERIES } from "@/lib/panoramaPalette";
 export const dynamic = "force-dynamic";
 
 export default async function PanoramaPage() {
+  await requireRole("admin");
   let data: Panorama;
   let shares: ShareStats | null = null;
   try {

@@ -6,14 +6,43 @@ import { SESSION_COOKIE, verifySessionToken } from "@/lib/auth";
 // cookie. The matcher already excludes those + static assets, so any request
 // that reaches here must carry a good cookie or it bounces to /login.
 // (Next 16 renamed the "middleware" file convention to "proxy".)
+//
+// A REGIONAL session (acceso regional, 2026-10-13) is read-only and fenced to
+// its own screens: GET only — so no server action, whatever its id, ever runs
+// for it — and only the paths below. Whether the grant is still alive, and
+// which of these sections it includes, is checked by each page/API
+// (lib/access.ts); this layer only keeps everything else out of reach.
+const REGIONAL_PATHS = [
+  /^\/regional$/,
+  /^\/mapa$/,
+  /^\/zonas$/,
+  /^\/brokers$/,
+  /^\/broker\/[0-9a-f-]{36}$/,
+  /^\/api\/zonas\/(mapa|colonias)$/,
+  /^\/api\/logout$/,
+];
+
 export async function proxy(req: NextRequest) {
   const secret = process.env.SESSION_SECRET ?? "";
   const token = req.cookies.get(SESSION_COOKIE)?.value;
-  const ok = await verifySessionToken(token, secret);
-  if (ok) return NextResponse.next();
+  const session = await verifySessionToken(token, secret);
 
+  if (!session) {
+    const url = req.nextUrl.clone();
+    url.pathname = "/login";
+    url.search = "";
+    return NextResponse.redirect(url);
+  }
+  if (session.kind === "staff") return NextResponse.next();
+
+  const path = req.nextUrl.pathname;
+  const readOnly = (req.method === "GET" || req.method === "HEAD") && !req.headers.has("next-action");
+  if (readOnly && REGIONAL_PATHS.some((r) => r.test(path))) return NextResponse.next();
+  if (!readOnly || path.startsWith("/api/")) {
+    return NextResponse.json({ error: "No autorizado" }, { status: 403 });
+  }
   const url = req.nextUrl.clone();
-  url.pathname = "/login";
+  url.pathname = "/regional";
   url.search = "";
   return NextResponse.redirect(url);
 }

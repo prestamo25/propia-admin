@@ -1,11 +1,15 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
-import { fetchMemberDossier, type Person } from "@/lib/miembro";
+import { fetchMemberDossier, type Dossier, type Person } from "@/lib/miembro";
 import type { Listing } from "@/lib/data";
+import { logMemberView, requireViewer, type Access, type Viewer } from "@/lib/access";
 import { BlockButton } from "@/components/BlockButton";
 import { PlanCard } from "@/components/PlanCard";
 import { VerificationCard } from "@/components/VerificationCard";
+import { AccesoRegionalCard } from "@/components/AccesoRegionalCard";
+import { fetchMemberAccess } from "@/lib/accesos";
+import { isTeamAccount } from "@/lib/team";
 import { fetchMemberVerification } from "@/lib/verificaciones";
 import { avatarColors, fmtDate, initials, relative, fmtPhone, waHref } from "@/lib/format";
 import { profileDetails, profileTypeLabel, tierOf } from "@/lib/profileTypes";
@@ -133,9 +137,203 @@ function ListingCard({ l }: { l: Listing }) {
   );
 }
 
+function MemberHeader() {
+  return (
+    <header className="sticky top-0 z-20 border-b border-black/[0.05] bg-white/65 backdrop-blur-xl">
+      <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 sm:px-6">
+        <Link href="/brokers" className="inline-flex items-center gap-1.5 text-sm font-medium text-neutral-500 transition hover:text-neutral-900">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="m15 18-6-6 6-6" />
+          </svg>
+          Miembros
+        </Link>
+        <a href="/api/logout" className="rounded-lg px-3 py-1.5 text-sm font-medium text-neutral-500 ring-1 ring-neutral-200 transition hover:bg-white hover:text-neutral-800">
+          Salir
+        </a>
+      </div>
+    </header>
+  );
+}
+
+// Acceso regional (2026-10-13): the member as the network sees them, for
+// someone outside the team. Only members the regional list shows (approved,
+// unblocked asesor/servicios in the viewer's estados, not Propia's own
+// accounts) open at all — anyone
+// else is a 404, same as a wrong id. Rendered from the dossier on the server;
+// nothing here hands the dossier to a client component, so what isn't
+// rendered never reaches the browser: no email, last sign-in, devices, plan,
+// verification history, contacts, activity, moderation, fichas/aperturas,
+// private listings or requerimientos, or the requerimiento's title (the
+// broker's own label for their client). Every view is logged to the grant.
+async function RegionalMember({ d, viewer, access }: { d: Dossier; viewer: Viewer; access: Access }) {
+  const { broker } = d;
+  const tier = tierOf(d.profile_type);
+  const visible =
+    broker.status === "approved" &&
+    !broker.blocked &&
+    !isTeamAccount(broker.id, broker.phone) &&
+    (tier === "asesor" || tier === "servicios") &&
+    broker.states.some((st) => access.estados.includes(st));
+  if (!visible) notFound();
+  await logMemberView(viewer, broker.id, broker.name);
+
+  const verification = await fetchMemberVerification(broker.id);
+  const c = avatarColors(broker.name);
+  const act = relative(broker.last_active);
+  const details = profileDetails(d.profile_type, d.profile_data);
+  const listings = broker.listings.filter((l) => l.live && l.visibility !== "private");
+  const requests = d.requests.filter((r) => r.status === "open" && r.lifecycle === "active" && r.visibility !== "private");
+  const attended = d.eventsAttended.filter((e) => e.status === "attended");
+
+  return (
+    <div className="min-h-screen">
+      <MemberHeader />
+      <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
+        <div className="mb-6 rounded-2xl border border-black/[0.05] bg-gradient-to-b from-white to-neutral-50/40 p-6 shadow-soft backdrop-blur-sm">
+          <div className="flex flex-wrap items-start gap-5">
+            {broker.avatar_url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={broker.avatar_url} alt="" className="h-16 w-16 shrink-0 rounded-2xl object-cover ring-1 ring-black/[0.06]" />
+            ) : (
+              <span className="grid h-16 w-16 shrink-0 place-items-center rounded-2xl text-xl font-semibold" style={{ background: c.bg, color: c.fg }}>
+                {initials(broker.name)}
+              </span>
+            )}
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2.5">
+                <h1 className="text-2xl font-semibold tracking-tight text-neutral-900">{broker.name ?? "—"}</h1>
+                <span className={`rounded-md px-1.5 py-0.5 text-[11px] font-semibold ring-1 ${tier === "asesor" ? "bg-neutral-100 text-neutral-500 ring-neutral-500/10" : "bg-indigo-50 text-indigo-700 ring-indigo-600/10"}`}>
+                  {profileTypeLabel(d.profile_type)}
+                  {d.profile_type === "otros" && details.find((x) => x.key === "giro") ? ` · ${details.find((x) => x.key === "giro")!.value}` : ""}
+                </span>
+                {verification?.status === "verified" ? (
+                  <span className="rounded-full bg-sky-50 px-2.5 py-1 text-xs font-medium text-sky-700 ring-1 ring-inset ring-sky-200">✓ Verificado</span>
+                ) : null}
+              </div>
+              {broker.company ? <p className="mt-0.5 text-sm text-neutral-500">{broker.company}</p> : null}
+              {d.bio ? <p className="mt-2 max-w-2xl text-sm text-neutral-600">{d.bio}</p> : null}
+
+              <dl className="mt-4 grid grid-cols-2 gap-x-8 gap-y-3 text-sm sm:grid-cols-3 lg:grid-cols-4">
+                {access.verTelefonos ? (
+                  <Meta label="Teléfono">
+                    {broker.phone ? (
+                      <a href={waHref(broker.phone)} target="_blank" rel="noreferrer" className="tabular-nums text-brand hover:underline">
+                        {fmtPhone(broker.phone)}
+                      </a>
+                    ) : "—"}
+                  </Meta>
+                ) : null}
+                <Meta label="Estados">{broker.states.length ? broker.states.join(", ") : "—"}</Meta>
+                <Meta label="Zonas">{d.zonas.length ? d.zonas.join(", ") : "—"}</Meta>
+                <Meta label="Miembro desde">{fmtDate(broker.created_at)}</Meta>
+                <Meta label="Última actividad">
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className={`h-1.5 w-1.5 rounded-full ${act.fresh ? "bg-emerald-500" : "bg-neutral-300"}`} />
+                    {act.label}
+                  </span>
+                </Meta>
+                {d.instagram ? (
+                  <Meta label="Instagram">
+                    <a href={`https://instagram.com/${d.instagram.replace(/^@/, "")}`} target="_blank" rel="noreferrer" className="text-brand hover:underline">@{d.instagram.replace(/^@/, "")}</a>
+                  </Meta>
+                ) : null}
+                {d.facebook ? (
+                  <Meta label="Facebook">
+                    <a href={d.facebook.startsWith("http") ? d.facebook : `https://facebook.com/${d.facebook}`} target="_blank" rel="noreferrer" className="truncate text-brand hover:underline">{d.facebook}</a>
+                  </Meta>
+                ) : null}
+                {details.filter((x) => !(d.profile_type === "otros" && x.key === "giro")).map((x) => (
+                  <Meta key={x.key} label={x.label}>
+                    {x.href ? <a href={x.href} target="_blank" rel="noreferrer" className="text-brand hover:underline">{x.value}</a> : x.value}
+                  </Meta>
+                ))}
+              </dl>
+            </div>
+          </div>
+        </div>
+
+        <section className="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <Stat label="Inventario" value={listings.length} />
+          <Stat label="Requerimientos" value={requests.length} sub="abiertos" />
+          <Stat label="Contactos" value={d.counts.contacts} />
+          <Stat label="Eventos" value={attended.length} sub="asistidos" tone="text-emerald-700" />
+        </section>
+
+        <Section title="Inventario" count={listings.length}>
+          {listings.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-neutral-200 bg-white/50 py-10 text-center text-sm text-neutral-400">Sin propiedades publicadas.</div>
+          ) : (
+            <ul className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {listings.map((l) => <ListingCard key={l.id} l={l} />)}
+            </ul>
+          )}
+        </Section>
+
+        {requests.length > 0 ? (
+          <Section title="Requerimientos" count={requests.length}>
+            <div className="overflow-x-auto rounded-2xl bg-white shadow-sm ring-1 ring-black/[0.05]">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-xs uppercase tracking-wide text-neutral-400">
+                    <th className="px-4 py-2.5 font-medium">Busca</th>
+                    <th className="px-4 py-2.5 font-medium">Dónde</th>
+                    <th className="px-4 py-2.5 text-right font-medium">Presupuesto</th>
+                    <th className="px-4 py-2.5 font-medium">Creado</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-black/[0.04]">
+                  {requests.map((r) => (
+                    <tr key={r.id}>
+                      <td className="px-4 py-2.5 text-neutral-700">
+                        {[r.transaction === "renta" ? "Renta" : r.transaction === "venta" ? "Venta" : r.transaction, r.types.map((t) => TYPE_LABELS[t] ?? t).join("/")].filter(Boolean).join(" · ")}
+                      </td>
+                      <td className="max-w-[14rem] truncate px-4 py-2.5 text-neutral-600">{r.states.join(", ") || "—"}</td>
+                      <td className="whitespace-nowrap px-4 py-2.5 text-right tabular-nums text-neutral-800">
+                        {r.price_max != null ? `hasta $${r.price_max.toLocaleString("en-US")}` : "—"}
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-2.5 text-xs text-neutral-500">{fmtDate(r.created_at)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Section>
+        ) : null}
+
+        {attended.length > 0 ? (
+          <Section title="Eventos a los que asistió" count={attended.length}>
+            <ul className="divide-y divide-black/[0.04] rounded-2xl bg-white shadow-sm ring-1 ring-black/[0.05]">
+              {attended.map((e) => (
+                <li key={e.id} className="flex items-center gap-3 px-4 py-2.5">
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium text-neutral-900">{e.title}</span>
+                    <span className="block text-xs text-neutral-500">{fmtWhen(e.start_at, null)}</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </Section>
+        ) : null}
+      </main>
+    </div>
+  );
+}
+
 export default async function BrokerPage({ params }: { params: Promise<{ id: string }> }) {
+  const viewer = await requireViewer("miembros");
   const { id } = await params;
-  const [d, verification] = await Promise.all([fetchMemberDossier(id), fetchMemberVerification(id)]);
+  if (viewer.kind === "regional") {
+    const dossier = await fetchMemberDossier(id);
+    if (!dossier) notFound();
+    return <RegionalMember d={dossier} viewer={viewer} access={viewer.access} />;
+  }
+  // Acceso regional is handed out by admin + técnico only (not Mariana's tier).
+  const canGrant = viewer.role === "admin" || viewer.role === "dev";
+  const [d, verification, panel] = await Promise.all([
+    fetchMemberDossier(id),
+    fetchMemberVerification(id),
+    canGrant ? fetchMemberAccess(id) : Promise.resolve(null),
+  ]);
   if (!d) notFound();
   const { broker } = d;
   const c = avatarColors(broker.name);
@@ -149,19 +347,7 @@ export default async function BrokerPage({ params }: { params: Promise<{ id: str
 
   return (
     <div className="min-h-screen">
-      <header className="sticky top-0 z-20 border-b border-black/[0.05] bg-white/65 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 sm:px-6">
-          <Link href="/brokers" className="inline-flex items-center gap-1.5 text-sm font-medium text-neutral-500 transition hover:text-neutral-900">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="m15 18-6-6 6-6" />
-            </svg>
-            Miembros
-          </Link>
-          <a href="/api/logout" className="rounded-lg px-3 py-1.5 text-sm font-medium text-neutral-500 ring-1 ring-neutral-200 transition hover:bg-white hover:text-neutral-800">
-            Salir
-          </a>
-        </div>
-      </header>
+      <MemberHeader />
 
       <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
         {/* Identity */}
@@ -279,6 +465,21 @@ export default async function BrokerPage({ params }: { params: Promise<{ id: str
                 status={verification.status}
                 verifiedAt={verification.verified_at}
                 events={verification.events}
+              />
+            </Section>
+          </div>
+        ) : null}
+
+        {/* Acceso al panel (acceso regional, 2026-10-13). */}
+        {panel ? (
+          <div id="acceso">
+            <Section title="Acceso al panel">
+              <AccesoRegionalCard
+                userId={broker.id}
+                name={broker.name}
+                memberStates={broker.states}
+                access={panel.access}
+                pinSet={panel.pinSet}
               />
             </Section>
           </div>

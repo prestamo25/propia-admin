@@ -116,52 +116,68 @@ const WA_DEMAND_DAYS = 30; // same window as the demand lifecycle: older asks ar
 const chunk = <T,>(xs: T[], n: number) =>
   Array.from({ length: Math.ceil(xs.length / n) }, (_, i) => xs.slice(i * n, i * n + n));
 
-export async function fetchMapData(): Promise<MapData> {
+// Acceso regional (2026-10-13): `estados` keeps only those estados (listings
+// by state, requerimientos whose states overlap, WhatsApp asks by the group's
+// estado) and `redact` strips every person before anything leaves the server
+// — owners, the requerimiento's private title (the broker's client label), the
+// group and its sender — plus the test-account plumbing.
+export type MapScope = { estados?: string[] | null; redact?: boolean };
+
+export async function fetchMapData(scope: MapScope = {}): Promise<MapData> {
   const sb = supabaseAdmin();
+  const estados = scope.estados ?? null;
+  const redact = !!scope.redact;
   const since = new Date(Date.now() - WA_DEMAND_DAYS * 24 * 3600 * 1000).toISOString();
-  const [props, reqs, waRows, groups] = await Promise.all([
-    pageAll<PropRow>(() =>
-      sb
+  // Groups first: a scoped map needs their jids to fetch only its estados' asks.
+  const gq = sb.from("wa_groups").select("group_jid, name, state");
+  const { data: groupData, error: groupErr } = await (estados ? gq.in("state", estados) : gq);
+  if (groupErr) throw new Error(groupErr.message);
+  const groups = (groupData ?? []) as GroupRow[];
+  const groupJids = groups.map((g) => g.group_jid);
+  const [props, reqs, waRows] = await Promise.all([
+    pageAll<PropRow>(() => {
+      const q = sb
         .from("properties")
         .select("id, name, price, currency, transaction, type, state, lat, lng, colonia_key, user_id, created_at")
         .eq("lifecycle", "active")
         .is("archived_at", null)
-        .or("source.is.null,source.neq.whatsapp")
-        .order("created_at", { ascending: false }),
-    ),
-    pageAll<ReqRow>(() =>
-      sb
+        .or("source.is.null,source.neq.whatsapp");
+      return (estados ? q.in("state", estados) : q).order("created_at", { ascending: false });
+    }),
+    pageAll<ReqRow>(() => {
+      const q = sb
         .from("search_requests")
         .select("id, title, transaction, types, states, price_min, price_max, lat, lng, radius_km, zona_key, zona_keys, created_by, created_at")
         .eq("status", "open")
-        .eq("lifecycle", "active")
-        .order("created_at", { ascending: false }),
-    ),
-    pageAll<WaRow>(() =>
-      sb
-        .from("wa_listings")
-        .select("id, captured_at, group_jid, sender_name, contact_phone, extracted, geo_lat, geo_lng, geo_precision, geo_place")
-        .eq("kind", "demanda")
-        .is("declined_at", null)
-        .gte("captured_at", since)
-        .order("captured_at", { ascending: false }),
-    ),
-    sb.from("wa_groups").select("group_jid, name, state").then(({ data, error }) => {
-      if (error) throw new Error(error.message);
-      return (data ?? []) as GroupRow[];
+        .eq("lifecycle", "active");
+      return (estados ? q.overlaps("states", estados) : q).order("created_at", { ascending: false });
     }),
+    estados && groupJids.length === 0
+      ? Promise.resolve([] as WaRow[])
+      : pageAll<WaRow>(() => {
+          const q = sb
+            .from("wa_listings")
+            .select("id, captured_at, group_jid, sender_name, contact_phone, extracted, geo_lat, geo_lng, geo_precision, geo_place")
+            .eq("kind", "demanda")
+            .is("declined_at", null)
+            .gte("captured_at", since);
+          return (estados ? q.in("group_jid", groupJids) : q).order("captured_at", { ascending: false });
+        }),
   ]);
   const groupByJid = new Map(groups.map((g) => [g.group_jid, g]));
   const last10 = (v: string | null | undefined) => {
     const d = (v ?? "").replace(/\D/g, "");
     return d.length >= 10 ? d.slice(-10) : null;
   };
-  const { data: testUsers, error: tuErr } = await sb.from("users").select("id, phone").in("id", TEST_OWNER_IDS);
-  if (tuErr) throw new Error(tuErr.message);
-  const testPhones = Array.from(new Set([
-    ...TEST_PHONES,
-    ...((testUsers ?? []) as { phone: string | null }[]).map((u) => last10(u.phone)).filter((x): x is string => !!x),
-  ]));
+  let testPhones: string[] = [];
+  if (!redact) {
+    const { data: testUsers, error: tuErr } = await sb.from("users").select("id, phone").in("id", TEST_OWNER_IDS);
+    if (tuErr) throw new Error(tuErr.message);
+    testPhones = Array.from(new Set([
+      ...TEST_PHONES,
+      ...((testUsers ?? []) as { phone: string | null }[]).map((u) => last10(u.phone)).filter((x): x is string => !!x),
+    ]));
+  }
 
   // Centroids for the colonia-only rows (one RPC, service role only).
   const keys = new Set<string>();
@@ -178,8 +194,8 @@ export async function fetchMapData(): Promise<MapData> {
     for (const c of (data ?? []) as Centroid[]) centroids.set(c.key, c);
   }
 
-  // Owner names in one sweep.
-  const ids = Array.from(new Set([...props.map((p) => p.user_id), ...reqs.map((r) => r.created_by)]));
+  // Owner names in one sweep (none at all when redacting).
+  const ids = redact ? [] : Array.from(new Set([...props.map((p) => p.user_id), ...reqs.map((r) => r.created_by)]));
   const owners = new Map<string, string>();
   for (const part of chunk(ids, 200)) {
     const { data, error } = await sb.from("users").select("id, name, company").in("id", part);
@@ -200,7 +216,7 @@ export async function fetchMapData(): Promise<MapData> {
     }
     listings.push({
       id: p.id, name: p.name, price: p.price, currency: p.currency, transaction: p.transaction,
-      type: p.type, state: p.state, lat, lng, precise, place, user_id: p.user_id,
+      type: p.type, state: p.state, lat, lng, precise, place, user_id: redact ? "" : p.user_id,
       owner: owners.get(p.user_id) ?? null, created_at: p.created_at,
     });
   }
@@ -216,9 +232,9 @@ export async function fetchMapData(): Promise<MapData> {
       lat = c.lat; lng = c.lng; precise = false; place = c.nombre;
     }
     requests.push({
-      id: r.id, title: r.title, transaction: r.transaction, types: r.types, states: r.states,
+      id: r.id, title: redact ? null : r.title, transaction: r.transaction, types: r.types, states: r.states,
       price_min: r.price_min, price_max: r.price_max, lat, lng, radius_km: r.radius_km, precise, place,
-      created_by: r.created_by, owner: owners.get(r.created_by) ?? null, created_at: r.created_at,
+      created_by: redact ? "" : r.created_by, owner: owners.get(r.created_by) ?? null, created_at: r.created_at,
     });
   }
 
@@ -233,7 +249,8 @@ export async function fetchMapData(): Promise<MapData> {
     waDemands.push({
       id: w.id, title: x.title ?? null, operation: x.operation ?? null, property_type: x.property_type ?? null,
       price: x.price ?? null, price_min: x.price_min ?? null, location: x.location ?? null,
-      group_name: g?.name ?? null, state: g?.state ?? null, sender_name: w.sender_name, sender_phone10: last10(w.contact_phone),
+      group_name: redact ? null : (g?.name ?? null), state: g?.state ?? null,
+      sender_name: redact ? null : w.sender_name, sender_phone10: redact ? null : last10(w.contact_phone),
       lat: w.geo_lat, lng: w.geo_lng, precise: w.geo_precision === "point",
       place: w.geo_precision === "point" ? null : (w.geo_place ?? x.location ?? null), captured_at: w.captured_at,
     });
@@ -243,7 +260,7 @@ export async function fetchMapData(): Promise<MapData> {
   for (const l of listings) if (l.state) stateCount.set(l.state, (stateCount.get(l.state) ?? 0) + 1);
   for (const r of requests) for (const s of r.states ?? []) stateCount.set(s, (stateCount.get(s) ?? 0) + 1);
   for (const w of waDemands) if (w.state) stateCount.set(w.state, (stateCount.get(w.state) ?? 0) + 1);
-  const states = Array.from(stateCount.entries()).sort((a, b) => b[1] - a[1]).map(([s]) => s);
+  const states = estados ?? Array.from(stateCount.entries()).sort((a, b) => b[1] - a[1]).map(([s]) => s);
 
   return {
     listings,
@@ -251,7 +268,7 @@ export async function fetchMapData(): Promise<MapData> {
     waDemands,
     missing: { listings: missingListings, requests: missingRequests, wa: missingWa },
     states,
-    testOwnerIds: TEST_OWNER_IDS,
+    testOwnerIds: redact ? [] : TEST_OWNER_IDS,
     testPhones,
     generatedAt: new Date().toISOString(),
   };

@@ -3,7 +3,7 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
-import { countFor, navFor, type NavKey, type NavLink } from "@/lib/nav";
+import { countFor, type NavEntry, type NavKey, type NavLink } from "@/lib/nav";
 
 const emptySubscribe = () => () => {};
 
@@ -134,18 +134,25 @@ const ICONS: Partial<Record<NavKey, React.ReactNode>> = {
       <circle cx="12" cy="11" r="2" />
     </svg>
   ),
+  accesos: (
+    <svg {...STROKE}>
+      <circle cx="7.5" cy="15.5" r="4.5" />
+      <path d="m10.7 12.3 9.3-9.3" />
+      <path d="m16 7 3 3" />
+    </svg>
+  ),
 };
 
 export function MobileNav({
   active,
-  isDev,
+  nav,
   roleBadge,
   openReports,
   pendingUsers,
   pendingVerifications,
 }: {
   active: NavKey;
-  isDev: boolean;
+  nav: NavEntry[];
   roleBadge: { label: string; cls: string };
   openReports: number;
   pendingUsers: number;
@@ -179,7 +186,6 @@ export function MobileNav({
   }, [open]);
 
   const counts = { openReports, pendingUsers, pendingVerifications };
-  const nav = navFor(isDev);
 
   const item = (i: NavLink) => {
     const isActive = active === i.key;

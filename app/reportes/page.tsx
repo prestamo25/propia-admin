@@ -1,3 +1,4 @@
+import { requireRole } from "@/lib/session";
 import { fetchReports, type ReportsData } from "@/lib/reports";
 import { ReportsQueue } from "@/components/ReportsQueue";
 import { TopNav } from "@/components/TopNav";
@@ -5,6 +6,7 @@ import { TopNav } from "@/components/TopNav";
 export const dynamic = "force-dynamic";
 
 export default async function ReportesPage() {
+  await requireRole("admin");
   let data: ReportsData;
   try {
     data = await fetchReports();

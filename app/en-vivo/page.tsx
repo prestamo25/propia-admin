@@ -1,3 +1,4 @@
+import { requireRole } from "@/lib/session";
 import { TopNav } from "@/components/TopNav";
 import { LiveBoard } from "@/components/LiveBoard";
 import { AltaManualForm } from "@/components/AltaManualForm";
@@ -6,7 +7,8 @@ export const dynamic = "force-dynamic";
 
 // Live registration board — built for event nights (Cumbre 2026-07-21):
 // leave it open on a laptop and watch signups land as brokers register.
-export default function EnVivoPage() {
+export default async function EnVivoPage() {
+  await requireRole("admin");
   return (
     <div className="min-h-screen">
       <TopNav active="envivo" />

@@ -135,17 +135,27 @@ const defaultDir = (k: SortKey): SortDir => (k === "name" ? "asc" : "desc");
 // &orden=&dir=), so a refresh or «back» from a profile keeps them and a
 // filtered list can be sent as a link. The Aprobaciones duplicate chip links
 // here with ?q=.
+//
+// `limited` = a regional viewer (acceso regional, 2026-10-13): the rows arrive
+// already cut to their estados and stripped server-side (no email, plan,
+// blocks); here the Premium chip, the Excel export and the «⋯» menu go away,
+// and the Estado picker offers only their own estados.
 export function BrokerTable({
   brokers,
   stats,
+  limited = null,
 }: {
   brokers: BrokerRow[];
   /** Numbers for the four cards above the table (computed on the server). */
   stats: MemberStats;
+  limited?: { estados: string[] } | null;
 }) {
   const router = useRouter();
   const params = useSearchParams();
-  const [filters, setFilters] = useState<BrokerFilters>(() => filtersFromParams(params));
+  const [filters, setFilters] = useState<BrokerFilters>(() => {
+    const f = filtersFromParams(params);
+    return limited ? { ...f, premium: false } : f;
+  });
   const [sortKey, setSortKey] = useState<SortKey>(() => {
     const k = params.get("orden") as SortKey;
     return SORT_KEYS.includes(k) ? k : DEFAULT_SORT;
@@ -195,8 +205,10 @@ export function BrokerTable({
   const stateCounts = useMemo(() => {
     const c = new Map<string, number>();
     for (const b of brokers) for (const s of b.states) c.set(s, (c.get(s) ?? 0) + 1);
-    return [...c].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "es"));
-  }, [brokers]);
+    return [...c]
+      .filter(([s]) => !limited || limited.estados.includes(s))
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "es"));
+  }, [brokers, limited]);
 
   const rows = useMemo(() => {
     const filtered = filterBrokers(brokers, filters);
@@ -237,6 +249,10 @@ export function BrokerTable({
   }
 
   const n = (v: number) => v.toLocaleString("en-US");
+  // Which of a multi-state member's estados to show first: the filtered one,
+  // or for a regional viewer their own (a Chihuahua list reads «Chihuahua +3»).
+  const preferEstado =
+    filters.estado !== "todos" ? filters.estado : limited ? limited.estados[0] : undefined;
 
   return (
     <div className="flex flex-1 flex-col">
@@ -254,14 +270,16 @@ export function BrokerTable({
               ["invitado", `Invitados · ${n(tierCounts.invitado)}`],
             ]}
           />
-          <FilterChip
-            on={filters.premium}
-            onClick={() => set("premium", !filters.premium)}
-            label="★ Premium"
-            title="Solo miembros que PAGAN Premium (excluye cortesías y ventas a mano)"
-            count={premiumCount}
-            tone="amber"
-          />
+          {limited ? null : (
+            <FilterChip
+              on={filters.premium}
+              onClick={() => set("premium", !filters.premium)}
+              label="★ Premium"
+              title="Solo miembros que PAGAN Premium (excluye cortesías y ventas a mano)"
+              count={premiumCount}
+              tone="amber"
+            />
+          )}
           <FilterChip
             on={filters.inactivos}
             onClick={() => set("inactivos", !filters.inactivos)}
@@ -269,15 +287,17 @@ export function BrokerTable({
             title={`Nunca han abierto la app, o no en los últimos ${INACTIVE_DAYS} días — la lista para darles seguimiento`}
             count={inactiveCount}
           />
-          <PillSelect
-            value={filters.estado}
-            onChange={(v) => set("estado", v)}
-            ariaLabel="Estado"
-            options={[
-              ["todos", "Todos los estados"],
-              ...stateCounts.map(([s, c]) => [s, `${s} (${n(c)})`] as [string, string]),
-            ]}
-          />
+          {limited && limited.estados.length < 2 ? null : (
+            <PillSelect
+              value={filters.estado}
+              onChange={(v) => set("estado", v)}
+              ariaLabel="Estado"
+              options={[
+                ["todos", "Todos los estados"],
+                ...stateCounts.map(([s, c]) => [s, `${s} (${n(c)})`] as [string, string]),
+              ]}
+            />
+          )}
         </PillTray>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -286,7 +306,7 @@ export function BrokerTable({
             onChange={(v) => set("q", v)}
             placeholder="Nombre, empresa o teléfono"
           />
-          <ExcelButton filters={filters} count={rows.length} total={brokers.length} />
+          {limited ? null : <ExcelButton filters={filters} count={rows.length} total={brokers.length} />}
           <ToolbarDivider />
           <span className="hidden items-baseline gap-1.5 text-sm text-neutral-500 sm:inline-flex">
             <span>
@@ -377,7 +397,7 @@ export function BrokerTable({
                     <>
                       <span className="shrink-0">·</span>
                       <span className="truncate">
-                        {filters.estado !== "todos" && b.states.includes(filters.estado) ? filters.estado : b.states[0]}
+                        {preferEstado && b.states.includes(preferEstado) ? preferEstado : b.states[0]}
                         {b.states.length > 1 ? ` +${b.states.length - 1}` : ""}
                       </span>
                     </>
@@ -528,7 +548,7 @@ export function BrokerTable({
                     {b.phone ? <CopyPhone phone={b.phone} /> : <span className="text-xs text-neutral-300">—</span>}
                   </Td>
                   <Td className="hidden xl:table-cell">
-                    <Estados states={b.states} prefer={filters.estado} />
+                    <Estados states={b.states} prefer={preferEstado} />
                   </Td>
                   <Td align="right">
                     <Num value={b.inventory} tone="brand" />
@@ -578,14 +598,16 @@ export function BrokerTable({
                     </span>
                   </Td>
                   <td className="border-b border-neutral-100/80 px-2 py-2.5 text-right [tr:last-child>&]:border-0" onClick={(e) => e.stopPropagation()}>
-                    <RowMenu
-                      open={menuFor === b.id}
-                      onToggle={() => setMenuFor((v) => (v === b.id ? null : b.id))}
-                      onClose={closeMenu}
-                      id={b.id}
-                      name={b.name}
-                      blocked={b.blocked}
-                    />
+                    {limited ? null : (
+                      <RowMenu
+                        open={menuFor === b.id}
+                        onToggle={() => setMenuFor((v) => (v === b.id ? null : b.id))}
+                        onClose={closeMenu}
+                        id={b.id}
+                        name={b.name}
+                        blocked={b.blocked}
+                      />
+                    )}
                   </td>
                 </tr>
               );
@@ -601,7 +623,9 @@ export function BrokerTable({
         </table>
       </div>
         </div>
-        <p className="mt-4 text-xs text-neutral-400">MB = almacenamiento en R2 (pendiente de conectar).</p>
+        {limited ? null : (
+          <p className="mt-4 text-xs text-neutral-400">MB = almacenamiento en R2 (pendiente de conectar).</p>
+        )}
       </main>
     </div>
   );

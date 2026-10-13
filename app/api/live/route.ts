@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
+import { getRole } from "@/lib/session";
 import { pageAll } from "@/lib/pageAll";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 export const dynamic = "force-dynamic";
 
 // Live registration metrics for /en-vivo (event nights, launch week). One
-// cheap query — the network is a few hundred rows — recomputed per poll; the
-// session proxy already gates this route like every page.
+// cheap query — the network is a few hundred rows — recomputed per poll; staff
+// only: the proxy proves *a* session, and a regional viewer's is one too.
 
 type FeedRow = {
   id: string;
@@ -18,6 +19,7 @@ type FeedRow = {
 };
 
 export async function GET() {
+  if (!(await getRole())) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   const sb = supabaseAdmin();
   // Paged: the en-vivo totals must see EVERY broker — PostgREST caps a single
   // response at 1,000 rows and .limit() can't exceed it.

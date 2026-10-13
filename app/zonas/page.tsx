@@ -1,6 +1,6 @@
 import { TopNav } from "@/components/TopNav";
 import { ZonasClient } from "@/components/ZonasClient";
-import { requireRole } from "@/lib/session";
+import { estadosOf, isRegional, requireViewer } from "@/lib/access";
 import { fetchMapData } from "@/lib/mapa";
 
 export const dynamic = "force-dynamic";
@@ -10,12 +10,14 @@ export const dynamic = "force-dynamic";
 // zones together read as a wall of ink. Listings come along only to count
 // what each zone holds and to show, on demand, the ones no zone covers; the
 // zones themselves are fetched per estado by the client.
+// A regional viewer (2026-10-13) gets their estados only, read-only.
 export default async function ZonasPage() {
-  await requireRole("admin");
+  const viewer = await requireViewer("zonas");
+  const readOnly = isRegional(viewer);
 
   let data;
   try {
-    data = await fetchMapData();
+    data = await fetchMapData({ estados: estadosOf(viewer), redact: readOnly });
   } catch (e) {
     return (
       <div className="min-h-screen">
@@ -41,7 +43,7 @@ export default async function ZonasPage() {
     // exactly one screen tall: the map never scrolls away, only the panel's list does
     <div className="flex h-dvh flex-col overflow-hidden">
       <TopNav active="zonas" />
-      <ZonasClient states={data.states} listings={listings} demand={demand} />
+      <ZonasClient states={data.states} listings={listings} demand={demand} readOnly={readOnly} />
     </div>
   );
 }

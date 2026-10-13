@@ -1,9 +1,11 @@
+import { requireRole } from "@/lib/session";
 import { TopNav } from "@/components/TopNav";
 import { RescueOtpCard } from "@/components/RescueOtpCard";
 
 export const dynamic = "force-dynamic";
 
-export default function AltaPage() {
+export default async function AltaPage() {
+  await requireRole("admin");
   return (
     <div className="min-h-screen">
       <TopNav active="alta" />

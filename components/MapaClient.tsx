@@ -80,7 +80,11 @@ const waGlyphHtml = (size: number) =>
 type Op = "todas" | "venta" | "renta";
 type Layer = "listings" | "requests" | "wa";
 
-export function MapaClient({ data }: { data: MapData }) {
+// `limited` = a regional viewer (acceso regional, 2026-10-13): their estados
+// only (no «Todos»), no «Pruebas», and popups without people or links — the
+// data arrives already redacted from lib/mapa.ts; this only drops the empty
+// rows and the links that would lead nowhere.
+export function MapaClient({ data, limited = false }: { data: MapData; limited?: boolean }) {
   const mapEl = useRef<HTMLDivElement>(null);
   const map = useRef<google.maps.Map | null>(null);
   const info = useRef<google.maps.InfoWindow | null>(null);
@@ -98,7 +102,9 @@ export function MapaClient({ data }: { data: MapData }) {
   // circles were one orange blob; the diamonds already say where demand is.
   const [zoom, setZoom] = useState(11);
 
-  const [estado, setEstado] = useState<string>(data.states.includes("Puebla") ? "Puebla" : (data.states[0] ?? ""));
+  const [estado, setEstado] = useState<string>(
+    !limited && data.states.includes("Puebla") ? "Puebla" : (data.states[0] ?? ""),
+  );
   const [op, setOp] = useState<Op>("todas");
   const [tipo, setTipo] = useState<string>("todos");
   const [layers, setLayers] = useState<Record<Layer, boolean>>({ listings: true, requests: true, wa: true });
@@ -193,7 +199,7 @@ export function MapaClient({ data }: { data: MapData }) {
             title: l.name ?? "",
           });
           marker.addListener("click", () => {
-            info.current?.setContent(listingCard(l));
+            info.current?.setContent(listingCard(l, limited));
             info.current?.open({ map: m, anchor: marker });
           });
           listingMarkers.current.set(l.id, marker);
@@ -220,7 +226,7 @@ export function MapaClient({ data }: { data: MapData }) {
               })
             : null;
           marker.addListener("click", () => {
-            info.current?.setContent(requestCard(r));
+            info.current?.setContent(requestCard(r, limited));
             info.current?.open({ map: m, anchor: marker });
           });
           requestMarkers.current.set(r.id, { marker, circle });
@@ -232,7 +238,7 @@ export function MapaClient({ data }: { data: MapData }) {
             title: w.title ?? "",
           });
           marker.addListener("click", () => {
-            info.current?.setContent(waCard(w));
+            info.current?.setContent(waCard(w, limited));
             info.current?.open({ map: m, anchor: marker });
           });
           waMarkers.current.set(w.id, marker);
@@ -326,7 +332,14 @@ export function MapaClient({ data }: { data: MapData }) {
         {/* Filters share one tray: pill dropdowns and a light segmented
             control, all the same height and radius as the layer pills. */}
         <PillTray>
-          <PillSelect value={estado} onChange={setEstado} options={[["", "Todos los estados"], ...data.states.map((s) => [s, s] as [string, string])]} />
+          <PillSelect
+            value={estado}
+            onChange={setEstado}
+            options={[
+              ...(limited ? [] : [["", "Todos los estados"] as [string, string]]),
+              ...data.states.map((s) => [s, s] as [string, string]),
+            ]}
+          />
           <PillSegment value={op} onChange={setOp} options={[["todas", "Todas"], ["venta", "Venta"], ["renta", "Renta"]]} />
           <PillSelect value={tipo} onChange={setTipo} options={[["todos", "Todos los tipos"], ...tipos.map((t) => [t, TYPE_LABEL[t] ?? t] as [string, string])]} />
         </PillTray>
@@ -361,7 +374,9 @@ export function MapaClient({ data }: { data: MapData }) {
           />
           <ToolbarDivider />
           <FilterChip on={onlyPrecise} onClick={() => setOnlyPrecise((v) => !v)} label="Punto exacto" title="Sólo lo que tiene un punto exacto, sin centros de colonia" />
-          <FilterChip on={testOnly} onClick={() => setTestOnly((v) => !v)} label="Pruebas" tone="amber" title="Sólo lo que subimos Pablo y yo para probar" />
+          {limited ? null : (
+            <FilterChip on={testOnly} onClick={() => setTestOnly((v) => !v)} label="Pruebas" tone="amber" title="Sólo lo que subimos Pablo y yo para probar" />
+          )}
         </div>
         {gError ? (
           <span className="rounded bg-rose-50 px-2 py-0.5 text-xs font-medium text-rose-700">
@@ -431,19 +446,19 @@ function LegendRow({ label, shown, hollow, missing }: { label: string; shown: nu
   );
 }
 
-function listingCard(l: MapListing): string {
+function listingCard(l: MapListing, limited: boolean): string {
   const t = TYPE_LABEL[l.type] ?? l.type;
   const place = l.precise ? "" : `<div style="color:#b45309;font-size:12px">Ubicada por colonia: ${esc(l.place)}</div>`;
   return `<div style="font:13px/1.35 system-ui;max-width:280px">
     <div style="font-weight:600">${esc(l.name) || `${t} en ${l.transaction}`}</div>
     <div>${t} · ${l.transaction} · <b>${money(l.price, l.currency)}</b></div>
     ${place}
-    <div style="color:#525252;margin-top:4px">${esc(l.owner)}</div>
-    <a href="/broker/${l.user_id}" style="color:#1c4588;font-size:12px">Ver asesor →</a>
+    ${limited ? "" : `<div style="color:#525252;margin-top:4px">${esc(l.owner)}</div>
+    <a href="/broker/${l.user_id}" style="color:#1c4588;font-size:12px">Ver asesor →</a>`}
   </div>`;
 }
 
-function requestCard(r: MapRequest): string {
+function requestCard(r: MapRequest, limited: boolean): string {
   const types = (r.types ?? []).map((t) => TYPE_LABEL[t] ?? t).join("/") || "cualquier tipo";
   const budget =
     r.price_min || r.price_max
@@ -456,12 +471,12 @@ function requestCard(r: MapRequest): string {
     <div style="font-weight:600">Requerimiento${r.title ? ` · ${esc(r.title)}` : ""}</div>
     <div>${types} en ${esc(r.transaction)} · ${budget}</div>
     <div style="color:#b45309;font-size:12px">${where}</div>
-    <div style="color:#525252;margin-top:4px">${esc(r.owner)}</div>
-    <a href="/broker/${r.created_by}" style="color:#1c4588;font-size:12px">Ver asesor →</a>
+    ${limited ? "" : `<div style="color:#525252;margin-top:4px">${esc(r.owner)}</div>
+    <a href="/broker/${r.created_by}" style="color:#1c4588;font-size:12px">Ver asesor →</a>`}
   </div>`;
 }
 
-function waCard(w: MapWaDemand): string {
+function waCard(w: MapWaDemand, limited: boolean): string {
   const t = w.property_type ? (TYPE_LABEL[w.property_type] ?? w.property_type) : "cualquier tipo";
   const budget =
     w.price || w.price_min
@@ -473,8 +488,10 @@ function waCard(w: MapWaDemand): string {
     <div style="font-weight:600">${waGlyphHtml(14)} ${w.title ? esc(w.title) : "Requerimiento del grupo"}</div>
     <div>${t} en ${esc(w.operation ?? "—")} · ${budget}</div>
     <div style="color:#6d28d9;font-size:12px">${where}</div>
-    <div style="color:#525252;margin-top:4px">${esc(w.group_name)} · ${esc(w.sender_name) || "sin nombre"} · ${when}</div>
-    <a href="/whatsapp" style="color:#1c4588;font-size:12px">Ver capturas →</a>
+    ${limited
+      ? `<div style="color:#525252;margin-top:4px">Grupo de WhatsApp · ${when}</div>`
+      : `<div style="color:#525252;margin-top:4px">${esc(w.group_name)} · ${esc(w.sender_name) || "sin nombre"} · ${when}</div>
+    <a href="/whatsapp" style="color:#1c4588;font-size:12px">Ver capturas →</a>`}
   </div>`;
 }
 
