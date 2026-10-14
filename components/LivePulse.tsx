@@ -185,7 +185,7 @@ function HourlyPulse({ hourly }: { hourly: Pulse["hourly"] }) {
           );
         })}
       </div>
-      <div className="mt-2.5 flex justify-between text-[10px] tabular-nums text-neutral-400">
+      <div className="mt-2.5 flex justify-between text-[11px] tabular-nums text-neutral-400">
         <span>00h</span><span>06h</span><span>12h</span><span>18h</span><span>23h</span>
       </div>
     </div>
@@ -374,7 +374,7 @@ export function LivePulse({ initial }: { initial: Pulse }) {
                       <span className="text-[11px] text-neutral-400">{k.label}</span>
                     </span>
                     {fresh && (
-                      <span className="rounded-md bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-600">
+                      <span className="rounded-md bg-emerald-50 px-1.5 py-0.5 text-[11px] font-semibold text-emerald-600">
                         nuevo
                       </span>
                     )}
@@ -393,7 +393,7 @@ export function LivePulse({ initial }: { initial: Pulse }) {
           <section className="rounded-2xl border border-black/[0.05] bg-white p-5 shadow-soft">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-sm font-semibold text-neutral-900">Ritmo de hoy</h2>
-              <span className="flex items-center gap-2 text-[10px] text-neutral-400">
+              <span className="flex items-center gap-2 text-[11px] text-neutral-400">
                 <span className="inline-flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full" style={{ background: "#2E5FB0" }} />Altas</span>
                 <span className="inline-flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full" style={{ background: "#059669" }} />Props</span>
                 <span className="inline-flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full" style={{ background: "#C2410C" }} />Reqs</span>

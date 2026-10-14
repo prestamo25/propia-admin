@@ -97,7 +97,7 @@ export async function TopNav({ active }: { active: NavKey }) {
   const badge = (n: number, extra = "") =>
     n > 0 ? (
       <span
-        className={`grid h-4 min-w-4 place-items-center rounded-full bg-rose-500 px-1 text-[10px] font-semibold tabular-nums text-white ${extra}`}
+        className={`grid h-4 min-w-4 place-items-center rounded-full bg-rose-500 px-1 text-[11px] font-semibold tabular-nums text-white ${extra}`}
       >
         {n}
       </span>

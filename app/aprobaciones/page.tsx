@@ -122,7 +122,7 @@ function Row({ u }: { u: PendingUser }) {
         <div className="flex flex-wrap items-baseline gap-x-2">
           <span className="truncate font-medium text-neutral-900">{u.name ?? "Sin nombre"}</span>
           <span
-            className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-semibold ring-1 ${
+            className={`shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-semibold ring-1 ${
               tierOf(u.profile_type) === "asesor"
                 ? "bg-neutral-100 text-neutral-500 ring-neutral-500/10"
                 : "bg-indigo-50 text-indigo-700 ring-indigo-600/10"

@@ -76,7 +76,7 @@ function Avatar({ u, size }: { u: VerificationRow; size: "lg" | "sm" }) {
 function TypePill({ type }: { type: string }) {
   return (
     <span
-      className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-semibold ring-1 ${
+      className={`shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-semibold ring-1 ${
         tierOf(type) === "asesor"
           ? "bg-neutral-100 text-neutral-500 ring-neutral-500/10"
           : "bg-indigo-50 text-indigo-700 ring-indigo-600/10"
@@ -111,7 +111,7 @@ function IneView({ files }: { files: IneFile[] }) {
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={f.url} alt={`INE ${i + 1}`} className="h-40 w-auto max-w-[18rem] object-contain transition group-hover:scale-[1.02]" />
-            <span className="absolute bottom-1.5 right-1.5 rounded-md bg-black/55 px-1.5 py-0.5 text-[10px] font-medium text-white opacity-0 transition group-hover:opacity-100">
+            <span className="absolute bottom-1.5 right-1.5 rounded-md bg-black/55 px-1.5 py-0.5 text-[11px] font-medium text-white opacity-0 transition group-hover:opacity-100">
               Abrir en grande ↗
             </span>
           </a>
@@ -209,7 +209,7 @@ function DecidedRow({ u }: { u: VerificationRow }) {
               {legalName(u)}
             </Link>
             <TypePill type={u.profile_type} />
-            {s ? <span className={`rounded-md px-1.5 py-0.5 text-[10px] font-semibold ring-1 ${s.cls}`}>{s.label}</span> : null}
+            {s ? <span className={`rounded-md px-1.5 py-0.5 text-[11px] font-semibold ring-1 ${s.cls}`}>{s.label}</span> : null}
           </div>
           {u.last ? (
             <p className="mt-0.5 text-xs text-neutral-500">

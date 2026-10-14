@@ -21,7 +21,7 @@ export function VeredictoBadge({ v }: { v: Verificacion }) {
   return (
     <span
       title={`${s.label}${v.confianza ? ` · confianza ${v.confianza}` : ""}${v.aplicada ? " · ya aplicada" : ""}`}
-      className={`inline-flex items-center gap-0.5 rounded-full px-1.5 text-[10px] font-semibold ring-1 ${s.cls} ${
+      className={`inline-flex items-center gap-0.5 rounded-full px-1.5 text-[11px] font-semibold ring-1 ${s.cls} ${
         v.aplicada ? "opacity-50" : ""
       }`}
     >

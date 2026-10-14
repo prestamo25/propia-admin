@@ -19,6 +19,7 @@ export type MemberRow = Omit<BrokerRow, "whatsapp_opt_in" | "mb_used" | "plan_so
 const PAGE = 100;
 import { BlockButton } from "@/components/BlockButton";
 import { startNavProgress } from "@/components/NavProgress";
+import { WaLink } from "@/components/WaLink";
 import { StatCard } from "@/components/StatCard";
 import {
   INACTIVE_DAYS,
@@ -402,16 +403,16 @@ export function BrokerTable({
                     {b.name ?? "—"}
                   </span>
                   {tierOf(b.profile_type) !== "asesor" ? (
-                    <span className="shrink-0 rounded-md bg-indigo-50 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-700 ring-1 ring-indigo-600/10">
+                    <span className="shrink-0 rounded-md bg-indigo-50 px-1.5 py-0.5 text-[11px] font-semibold text-indigo-700 ring-1 ring-indigo-600/10">
                       {profileTypeLabel(b.profile_type)}
                     </span>
                   ) : null}
                   {b.premium ? (
-                    <span className="shrink-0 rounded-md bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800 ring-1 ring-amber-600/10" title="Premium pagado">
+                    <span className="shrink-0 rounded-md bg-amber-50 px-1.5 py-0.5 text-[11px] font-semibold text-amber-800 ring-1 ring-amber-600/10" title="Premium pagado">
                       ★ Premium
                     </span>
                   ) : b.comped ? (
-                    <span className="shrink-0 rounded-md bg-neutral-100 px-1.5 py-0.5 text-[10px] font-semibold text-neutral-600 ring-1 ring-neutral-600/10" title="Premium regalado — no cuenta como ingreso">
+                    <span className="shrink-0 rounded-md bg-neutral-100 px-1.5 py-0.5 text-[11px] font-semibold text-neutral-600 ring-1 ring-neutral-600/10" title="Premium regalado — no cuenta como ingreso">
                       Cortesía
                     </span>
                   ) : null}
@@ -444,6 +445,7 @@ export function BrokerTable({
                   {b.requests} req · {b.contacts} contactos · {b.events_attended} eventos · {b.sends} envíos
                 </div>
               </div>
+              {b.phone ? <WaLink phone={b.phone} name={b.name} /> : null}
               <span
                 className={`inline-block min-w-7 shrink-0 rounded-md px-2 py-0.5 text-center text-xs font-semibold tabular-nums ${
                   b.inventory > 0 ? "bg-brand-light text-brand" : "text-neutral-300"
@@ -555,21 +557,21 @@ export function BrokerTable({
                               1,537 are «Aprobado», so a column of it said
                               nothing (2026-09-28). */}
                           {flag ? (
-                            <span className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-semibold ring-1 ${flag.cls}`}>
+                            <span className={`shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-semibold ring-1 ${flag.cls}`}>
                               {flag.label}
                             </span>
                           ) : null}
                           {tierOf(b.profile_type) !== "asesor" ? (
-                            <span className="shrink-0 rounded-md bg-indigo-50 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-700 ring-1 ring-indigo-600/10">
+                            <span className="shrink-0 rounded-md bg-indigo-50 px-1.5 py-0.5 text-[11px] font-semibold text-indigo-700 ring-1 ring-indigo-600/10">
                               {profileTypeLabel(b.profile_type)}
                             </span>
                           ) : null}
                           {b.premium ? (
-                            <span className="shrink-0 rounded-md bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800 ring-1 ring-amber-600/10" title="Premium pagado">
+                            <span className="shrink-0 rounded-md bg-amber-50 px-1.5 py-0.5 text-[11px] font-semibold text-amber-800 ring-1 ring-amber-600/10" title="Premium pagado">
                               ★ Premium
                             </span>
                           ) : b.comped ? (
-                            <span className="shrink-0 rounded-md bg-neutral-100 px-1.5 py-0.5 text-[10px] font-semibold text-neutral-600 ring-1 ring-neutral-600/10" title="Premium regalado — no cuenta como ingreso">
+                            <span className="shrink-0 rounded-md bg-neutral-100 px-1.5 py-0.5 text-[11px] font-semibold text-neutral-600 ring-1 ring-neutral-600/10" title="Premium regalado — no cuenta como ingreso">
                               Cortesía
                             </span>
                           ) : null}
@@ -583,7 +585,14 @@ export function BrokerTable({
                     </div>
                   </Td>
                   <Td className="whitespace-nowrap">
-                    {b.phone ? <CopyPhone phone={b.phone} /> : <span className="text-xs text-neutral-300">—</span>}
+                    {b.phone ? (
+                      <span className="inline-flex items-center gap-2">
+                        <WaLink phone={b.phone} name={b.name} size="sm" />
+                        <CopyPhone phone={b.phone} />
+                      </span>
+                    ) : (
+                      <span className="text-xs text-neutral-300">—</span>
+                    )}
                   </Td>
                   <Td className="hidden xl:table-cell">
                     <Estados states={b.states} prefer={preferEstado} />
@@ -724,7 +733,7 @@ function Platforms({ list }: { list: string[] }) {
             <path d="M17.6 9.48 19.44 6.3a.38.38 0 0 0-.66-.38l-1.87 3.23a11.43 11.43 0 0 0-9.82 0L5.22 5.92a.38.38 0 1 0-.66.38L6.4 9.48A10.78 10.78 0 0 0 1 18h22a10.78 10.78 0 0 0-5.4-8.52ZM7 15.25A1.25 1.25 0 1 1 8.25 14 1.25 1.25 0 0 1 7 15.25Zm10 0A1.25 1.25 0 1 1 18.25 14 1.25 1.25 0 0 1 17 15.25Z" />
           </svg>
         ) : (
-          <span key={p} className="text-[10px] font-semibold uppercase">
+          <span key={p} className="text-[11px] font-semibold uppercase">
             {p}
           </span>
         ),
@@ -1046,7 +1055,7 @@ function Estados({ states, prefer }: { states: string[]; prefer?: string }) {
     <span className="inline-flex max-w-full items-center gap-1.5" title={states.join(", ")}>
       <span className="truncate text-xs text-neutral-600">{first}</span>
       {extra > 0 ? (
-        <span className="shrink-0 rounded-md bg-neutral-100 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-neutral-500">
+        <span className="shrink-0 rounded-md bg-neutral-100 px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-neutral-500">
           +{extra}
         </span>
       ) : null}

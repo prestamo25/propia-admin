@@ -328,7 +328,7 @@ export function ZonasPanel({
                                     ) : z.traslapes.length ? (
                                       <span
                                         title={`Se traslapa con ${z.traslapes.length}`}
-                                        className="rounded-full bg-amber-50 px-1.5 text-[10px] font-semibold text-amber-700 ring-1 ring-amber-200"
+                                        className="rounded-full bg-amber-50 px-1.5 text-[11px] font-semibold text-amber-700 ring-1 ring-amber-200"
                                       >
                                         Traslape
                                       </span>
@@ -665,7 +665,7 @@ function Mini({ value, label }: { value: string; label: string }) {
   return (
     <div className="rounded-lg bg-white px-2 py-1.5 shadow-sm">
       <dd className="text-base font-semibold tabular-nums text-neutral-900">{value}</dd>
-      <dt className="text-[10px] uppercase tracking-wider text-neutral-400">{label}</dt>
+      <dt className="text-[11px] uppercase tracking-wider text-neutral-400">{label}</dt>
     </div>
   );
 }

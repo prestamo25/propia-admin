@@ -175,7 +175,7 @@ export function SearchPalette({ pages }: { pages: { href: string; label: string 
           <path d="m20 20-3.5-3.5" />
         </svg>
         <span className="hidden text-sm font-medium navmd:inline">Buscar</span>
-        <kbd className="hidden rounded border border-neutral-200 px-1 text-[10px] font-medium text-neutral-400 navmd:inline">⌘K</kbd>
+        <kbd className="hidden rounded border border-neutral-200 px-1 text-[11px] font-medium text-neutral-400 navmd:inline">⌘K</kbd>
       </button>
 
       {open

@@ -19,6 +19,12 @@
   --breakpoint-navsm: 52.5rem; /* 840px — below it the header is the drawer */
   --breakpoint-navmd: 62.5rem; /* 1000px */
 
+  /* Readable secondary text (Franz 2026-10-14, UI/UX batch C): Tailwind's
+     neutral-400 (≈#a3a3a3, 2.5:1 on white) was the panel's «quiet» text in
+     ~200 places and washed out on phones outdoors. One step darker here
+     (≈#8a8a8a, ~3.5:1) keeps it quieter than neutral-500 but legible. */
+  --color-neutral-400: oklch(62% 0 0);
+
   --color-brand: #1c4588;
   --color-brand-dark: #14315f;
   --color-brand-light: #eef2fa;

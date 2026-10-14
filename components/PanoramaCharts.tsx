@@ -453,7 +453,7 @@ export function SupplyDemand({ rows }: { rows: Panorama["supplyDemand"] }) {
                 {r.supply || ""}
               </span>
               {gap ? (
-                <span className="rounded bg-rose-50 px-1.5 py-0.5 text-[10px] font-medium text-rose-600 ring-1 ring-inset ring-rose-200">
+                <span className="rounded bg-rose-50 px-1.5 py-0.5 text-[11px] font-medium text-rose-600 ring-1 ring-inset ring-rose-200">
                   sin oferta
                 </span>
               ) : null}

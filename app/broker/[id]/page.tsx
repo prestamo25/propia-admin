@@ -63,9 +63,9 @@ function Stat({ label, value, sub, tone }: { label: string; value: number; sub?:
   );
 }
 
-function Section({ title, count, children }: { title: string; count?: number; children: ReactNode }) {
+function Section({ title, count, id, children }: { title: string; count?: number; id?: string; children: ReactNode }) {
   return (
-    <section className="mb-8">
+    <section id={id} className="mb-8 scroll-mt-32">
       <div className="mb-3 flex items-baseline gap-2">
         <h2 className="text-lg font-semibold tracking-tight text-neutral-900">{title}</h2>
         {count != null ? <span className="text-sm tabular-nums text-neutral-400">{count}</span> : null}
@@ -93,7 +93,7 @@ function PersonRow({ p, right }: { p: Person; right?: ReactNode }) {
           <span className="flex items-center gap-1.5">
             <span className="truncate text-sm font-medium text-neutral-900 group-hover:text-brand">{p.name ?? "—"}</span>
             {tier !== "asesor" ? (
-              <span className="shrink-0 rounded-md bg-indigo-50 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-700 ring-1 ring-indigo-600/10">
+              <span className="shrink-0 rounded-md bg-indigo-50 px-1.5 py-0.5 text-[11px] font-semibold text-indigo-700 ring-1 ring-indigo-600/10">
                 {profileTypeLabel(p.profile_type)}
               </span>
             ) : null}
@@ -119,7 +119,7 @@ function RequestCards({ requests, regional }: { requests: MemberRequest[]; regio
             <div className="flex min-w-0 items-center gap-1.5 text-sm font-medium text-neutral-900">
               <span className="truncate">{r.title ?? "—"}</span>
               {r.visibility === "private" ? (
-                <span className="shrink-0 rounded-md bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">Privado</span>
+                <span className="shrink-0 rounded-md bg-amber-50 px-1.5 py-0.5 text-[11px] font-semibold text-amber-700">Privado</span>
               ) : null}
             </div>
           )}
@@ -141,6 +141,29 @@ function RequestCards({ requests, regional }: { requests: MemberRequest[]; regio
         </li>
       ))}
     </ul>
+  );
+}
+
+// Jump links (Franz 2026-10-14, UI/UX batch C): the member page runs long —
+// plan, verification, access, listings, requerimientos, events, network,
+// activity — so a row of section links sticks under the top bar (64px).
+function JumpBar({ links }: { links: [string, string][] }) {
+  if (links.length < 3) return null;
+  return (
+    <nav
+      aria-label="Secciones"
+      className="sticky top-[64px] z-10 -mx-4 mb-6 flex gap-1.5 overflow-x-auto border-y border-black/[0.05] bg-white/80 px-4 py-2 backdrop-blur-xl sm:mx-0 sm:rounded-xl sm:border"
+    >
+      {links.map(([id, label]) => (
+        <a
+          key={id}
+          href={`#${id}`}
+          className="shrink-0 rounded-full px-3 py-1 text-sm font-medium text-neutral-600 ring-1 ring-neutral-200 transition hover:bg-neutral-50 hover:text-neutral-900"
+        >
+          {label}
+        </a>
+      ))}
+    </nav>
   );
 }
 
@@ -292,7 +315,15 @@ async function RegionalMember({ d, viewer, access }: { d: Dossier; viewer: Viewe
           <Stat label="Eventos" value={attended.length} sub="asistidos" tone="text-emerald-700" />
         </section>
 
-        <Section title="Inventario" count={listings.length}>
+        <JumpBar
+          links={[
+            ["inventario", "Inventario"],
+            ...(requests.length ? ([["requerimientos", "Requerimientos"]] as [string, string][]) : []),
+            ...(attended.length ? ([["eventos", "Eventos"]] as [string, string][]) : []),
+          ]}
+        />
+
+        <Section title="Inventario" count={listings.length} id="inventario">
           {listings.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-neutral-200 bg-white/50 py-10 text-center text-sm text-neutral-400">Sin propiedades publicadas.</div>
           ) : (
@@ -303,7 +334,7 @@ async function RegionalMember({ d, viewer, access }: { d: Dossier; viewer: Viewe
         </Section>
 
         {requests.length > 0 ? (
-          <Section title="Requerimientos" count={requests.length}>
+          <Section title="Requerimientos" count={requests.length} id="requerimientos">
             <RequestCards requests={requests} regional />
             <div className="hidden overflow-x-auto rounded-2xl bg-white shadow-sm ring-1 ring-black/[0.05] sm:block">
               <table className="w-full text-sm">
@@ -335,7 +366,7 @@ async function RegionalMember({ d, viewer, access }: { d: Dossier; viewer: Viewe
         ) : null}
 
         {attended.length > 0 ? (
-          <Section title="Eventos a los que asistió" count={attended.length}>
+          <Section title="Eventos a los que asistió" count={attended.length} id="eventos">
             <ul className="divide-y divide-black/[0.04] rounded-2xl bg-white shadow-sm ring-1 ring-black/[0.05]">
               {attended.map((e) => (
                 <li key={e.id} className="flex items-center gap-3 px-4 py-2.5">
@@ -432,7 +463,7 @@ export default async function BrokerPage({ params }: { params: Promise<{ id: str
                     {fmtPhone(broker.phone)}
                   </a>
                 ) : "—"}
-                {d.whatsapp_opt_in ? <span className="ml-1.5 rounded-md bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700">acepta WhatsApp</span> : null}
+                {d.whatsapp_opt_in ? <span className="ml-1.5 rounded-md bg-emerald-50 px-1.5 py-0.5 text-[11px] font-semibold text-emerald-700">acepta WhatsApp</span> : null}
               </Meta>
               <Meta label="Email">{d.email ? <a href={`mailto:${d.email}`} title={d.email} className="text-neutral-800 hover:text-brand">{d.email}</a> : "—"}</Meta>
               <Meta label="Estados">{broker.states.length ? broker.states.join(", ") : "—"}</Meta>
@@ -475,8 +506,22 @@ export default async function BrokerPage({ params }: { params: Promise<{ id: str
           <Stat label="Aperturas" value={d.counts.opens} sub="de sus fichas" />
         </section>
 
+        <JumpBar
+          links={([
+            ["plan", "Plan"],
+            verification ? ["verificacion", "Verificación"] : null,
+            panel ? ["acceso", "Acceso al panel"] : null,
+            ["inventario", "Inventario"],
+            d.requests.length ? ["requerimientos", "Requerimientos"] : null,
+            d.eventsOrganized.length || d.eventsAttended.length ? ["eventos", "Eventos"] : null,
+            d.contacts.length || d.vinculos.length ? ["red", "Red"] : null,
+            d.activity.length ? ["actividad", "Actividad"] : null,
+            hasModeration ? ["moderacion", "Moderación"] : null,
+          ] as ([string, string] | null)[]).filter((x): x is [string, string] => !!x)}
+        />
+
         {/* Plan (paid tier) — state, one action, history. */}
-        <div id="plan">
+        <div id="plan" className="scroll-mt-32">
           <Section title="Plan">
             <PlanCard
               id={broker.id}
@@ -492,7 +537,7 @@ export default async function BrokerPage({ params }: { params: Promise<{ id: str
 
         {/* Verificado (blue check) — state, revoke, history. */}
         {verification ? (
-          <div id="verificacion">
+          <div id="verificacion" className="scroll-mt-32">
             <Section title="Verificación">
               <VerificationCard
                 id={broker.id}
@@ -508,7 +553,7 @@ export default async function BrokerPage({ params }: { params: Promise<{ id: str
 
         {/* Acceso al panel (acceso regional, 2026-10-13). */}
         {panel ? (
-          <div id="acceso">
+          <div id="acceso" className="scroll-mt-32">
             <Section title="Acceso al panel">
               <AccesoRegionalCard
                 userId={broker.id}
@@ -522,7 +567,7 @@ export default async function BrokerPage({ params }: { params: Promise<{ id: str
         ) : null}
 
         {/* Inventory */}
-        <Section title="Inventario" count={broker.listings.length}>
+        <Section title="Inventario" count={broker.listings.length} id="inventario">
           {broker.listings.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-neutral-200 bg-white/50 py-10 text-center text-sm text-neutral-400">Sin propiedades publicadas.</div>
           ) : (
@@ -533,7 +578,7 @@ export default async function BrokerPage({ params }: { params: Promise<{ id: str
         </Section>
 
         {d.requests.length > 0 ? (
-          <Section title="Requerimientos" count={d.requests.length}>
+          <Section title="Requerimientos" count={d.requests.length} id="requerimientos">
             <RequestCards requests={d.requests} regional={false} />
             <div className="hidden overflow-x-auto rounded-2xl bg-white shadow-sm ring-1 ring-black/[0.05] sm:block">
               <table className="w-full text-sm">
@@ -552,7 +597,7 @@ export default async function BrokerPage({ params }: { params: Promise<{ id: str
                     <tr key={r.id}>
                       <td className="max-w-[14rem] truncate px-4 py-2.5 font-medium text-neutral-900">
                         {r.title ?? "—"}
-                        {r.visibility === "private" ? <span className="ml-1.5 rounded-md bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">Privado</span> : null}
+                        {r.visibility === "private" ? <span className="ml-1.5 rounded-md bg-amber-50 px-1.5 py-0.5 text-[11px] font-semibold text-amber-700">Privado</span> : null}
                       </td>
                       <td className="px-4 py-2.5 text-neutral-700">
                         {[r.transaction === "renta" ? "Renta" : r.transaction === "venta" ? "Venta" : r.transaction, r.types.map((t) => TYPE_LABELS[t] ?? t).join("/")].filter(Boolean).join(" · ")}
@@ -576,7 +621,7 @@ export default async function BrokerPage({ params }: { params: Promise<{ id: str
         ) : null}
 
         {d.eventsOrganized.length > 0 || d.eventsAttended.length > 0 ? (
-          <Section title="Eventos">
+          <Section title="Eventos" id="eventos">
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
               <div className="rounded-2xl bg-white shadow-sm ring-1 ring-black/[0.05]">
                 <div className="border-b border-black/[0.05] px-4 py-2.5 text-xs font-medium uppercase tracking-wide text-neutral-400">
@@ -632,7 +677,7 @@ export default async function BrokerPage({ params }: { params: Promise<{ id: str
         ) : null}
 
         {d.contacts.length > 0 || d.vinculos.length > 0 ? (
-          <Section title="Red">
+          <Section title="Red" id="red">
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
               <div className="rounded-2xl bg-white shadow-sm ring-1 ring-black/[0.05]">
                 <div className="border-b border-black/[0.05] px-4 py-2.5 text-xs font-medium uppercase tracking-wide text-neutral-400">Contactos · {d.contacts.length}</div>
@@ -661,12 +706,12 @@ export default async function BrokerPage({ params }: { params: Promise<{ id: str
         ) : null}
 
         {d.activity.length > 0 ? (
-          <Section title="Actividad reciente" count={d.activity.length}>
+          <Section title="Actividad reciente" count={d.activity.length} id="actividad">
             <ol className="rounded-2xl bg-white shadow-sm ring-1 ring-black/[0.05]">
               {d.activity.map((a, i) => (
                 <li key={`${a.at}-${i}`} className="flex items-center gap-3 border-b border-black/[0.04] px-4 py-2.5 last:border-0">
                   <span className="w-28 shrink-0 text-xs tabular-nums text-neutral-400">{fmtStamp(a.at)}</span>
-                  <span className="w-24 shrink-0 rounded-md bg-neutral-100 px-1.5 py-0.5 text-center text-[10px] font-semibold uppercase tracking-wide text-neutral-500">{a.kind}</span>
+                  <span className="w-24 shrink-0 rounded-md bg-neutral-100 px-1.5 py-0.5 text-center text-[11px] font-semibold uppercase tracking-wide text-neutral-500">{a.kind}</span>
                   {a.href ? (
                     <Link href={a.href} className="min-w-0 flex-1 truncate text-sm text-neutral-800 hover:text-brand">{a.label}</Link>
                   ) : (
@@ -679,7 +724,7 @@ export default async function BrokerPage({ params }: { params: Promise<{ id: str
         ) : null}
 
         {hasModeration ? (
-          <Section title="Moderación">
+          <Section title="Moderación" id="moderacion">
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <Stat label="Reportes hechos" value={mod.reportsMade} />
               <Stat label="Reportes recibidos" value={mod.reportsReceived} tone="text-rose-700" />
