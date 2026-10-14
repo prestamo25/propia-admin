@@ -4,6 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { sendBroadcast } from "@/app/actions";
 import { startNavProgress } from "@/components/NavProgress";
+import { toast } from "@/components/Toaster";
 
 // El compositor de avisos masivos. La pieza que más importa no es el textarea
 // sino el CONTEO: es la última oportunidad de notar que el filtro está mal
@@ -60,6 +61,7 @@ export function BroadcastComposer({
       if (r.error) setError(r.error);
       else {
         setResult(`Enviado a ${r.sent?.toLocaleString("es-MX")} dispositivos.`);
+        toast(`Aviso enviado a ${r.sent?.toLocaleString("es-MX")} dispositivos ✓`);
         setBody("");
         setEventId("");
       }

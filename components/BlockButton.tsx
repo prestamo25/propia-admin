@@ -2,6 +2,7 @@
 
 import { useTransition } from "react";
 import { blockBroker, unblockBroker } from "@/app/actions";
+import { toast } from "@/components/Toaster";
 
 export function BlockButton({
   id,
@@ -25,7 +26,8 @@ export function BlockButton({
     if (blocked) {
       startTransition(async () => {
         const res = await unblockBroker(id);
-        if (res?.error) alert(res.error);
+        if (res?.error) toast(res.error, { tone: "error" });
+        else toast(`Desbloqueaste a ${name ?? "este broker"}`, { undo: () => blockBroker(id) });
         onDone?.();
       });
     } else {
@@ -35,7 +37,8 @@ export function BlockButton({
       if (!ok) return;
       startTransition(async () => {
         const res = await blockBroker(id);
-        if (res?.error) alert(res.error);
+        if (res?.error) toast(res.error, { tone: "error" });
+        else toast(`Bloqueaste a ${name ?? "este broker"}: ya no puede entrar a la app`, { undo: () => unblockBroker(id) });
         onDone?.();
       });
     }

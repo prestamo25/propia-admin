@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { DM_Sans, Geist_Mono } from "next/font/google";
 import { Suspense } from "react";
 import { NavProgress } from "@/components/NavProgress";
+import { Toaster } from "@/components/Toaster";
 import "./globals.css";
 
 // DM Sans — the app's typeface; the panel speaking the same voice is half
@@ -37,6 +38,7 @@ export default function RootLayout({
           <NavProgress />
         </Suspense>
         {children}
+        <Toaster />
       </body>
     </html>
   );

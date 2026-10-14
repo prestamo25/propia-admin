@@ -4,6 +4,7 @@ import { countPendingUsers } from "@/lib/aprobaciones";
 import { countPendingVerifications } from "@/lib/verificaciones";
 import { getAccess, getRole } from "@/lib/session";
 import { MobileNav } from "@/components/MobileNav";
+import { SearchPalette } from "@/components/SearchPalette";
 import {
   countFor,
   navFor,
@@ -73,6 +74,10 @@ export async function TopNav({ active }: { active: NavKey }) {
   const isDev = role === "dev";
   const nav = regional ? navForRegional(regional.secciones) : navFor(isDev, isDev || role === "admin");
   const home = regional ? "/regional" : "/";
+  // The search box (team only) also jumps to the panel's own pages by name.
+  const pages = regional
+    ? []
+    : nav.flatMap((e) => (e.kind === "link" ? [{ href: e.href, label: e.label }] : e.items.map((l) => ({ href: l.href, label: l.label }))));
   const tone =
     role === "dev"
       ? "bg-violet-100 text-violet-700"
@@ -248,44 +253,47 @@ export async function TopNav({ active }: { active: NavKey }) {
             )}
           </nav>
         </div>
-        <div className="hidden shrink-0 items-center navsm:flex">
-          <a
-            href="/api/logout"
-            className="hidden rounded-lg px-3 py-1.5 text-sm font-medium text-neutral-500 ring-1 ring-neutral-200 transition hover:bg-white hover:text-neutral-800 navmd:inline-block"
-          >
-            Salir
-          </a>
-          <a
-            href="/api/logout"
-            title="Salir"
-            aria-label="Salir"
-            className="grid h-8 w-8 place-items-center rounded-lg text-neutral-500 ring-1 ring-neutral-200 transition hover:bg-white hover:text-neutral-800 navmd:hidden"
-          >
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
+        <div className="flex shrink-0 items-center gap-2">
+          {regional ? null : <SearchPalette pages={pages} />}
+          <div className="hidden shrink-0 items-center navsm:flex">
+            <a
+              href="/api/logout"
+              className="hidden rounded-lg px-3 py-1.5 text-sm font-medium text-neutral-500 ring-1 ring-neutral-200 transition hover:bg-white hover:text-neutral-800 navmd:inline-block"
             >
-              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-              <polyline points="16 17 21 12 16 7" />
-              <line x1="21" x2="9" y1="12" y2="12" />
-            </svg>
-          </a>
+              Salir
+            </a>
+            <a
+              href="/api/logout"
+              title="Salir"
+              aria-label="Salir"
+              className="grid h-8 w-8 place-items-center rounded-lg text-neutral-500 ring-1 ring-neutral-200 transition hover:bg-white hover:text-neutral-800 navmd:hidden"
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                <polyline points="16 17 21 12 16 7" />
+                <line x1="21" x2="9" y1="12" y2="12" />
+              </svg>
+            </a>
+          </div>
+          <MobileNav
+            active={active}
+            nav={nav}
+            roleBadge={roleBadge}
+            openReports={openReports}
+            pendingUsers={pendingUsers}
+            pendingVerifications={pendingVerifications}
+          />
         </div>
-        <MobileNav
-          active={active}
-          nav={nav}
-          roleBadge={roleBadge}
-          openReports={openReports}
-          pendingUsers={pendingUsers}
-          pendingVerifications={pendingVerifications}
-        />
       </div>
     </header>
   );

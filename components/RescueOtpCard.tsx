@@ -7,6 +7,7 @@ import {
   removeRescuePair,
   type RescuePair,
 } from "@/app/actions";
+import { toast } from "@/components/Toaster";
 
 function formatPhone(p: string): string {
   return p.replace(/(\d{3})(\d{3})(\d{4})/, "$1 $2 $3");
@@ -66,6 +67,7 @@ export function RescueOtpCard() {
       return;
     }
     setDone({ phone10: digits, already: !!res.already });
+    toast(res.already ? "Ese número ya tenía el código de rescate" : "Código de rescate activo: 123456");
     setPhone("");
     refresh();
   }
@@ -78,6 +80,7 @@ export function RescueOtpCard() {
     if (res.error) setListError(res.error);
     else {
       if (done?.phone10 === phone10) setDone(null);
+      toast("Rescate quitado: ese número vuelve a recibir su código normal");
       refresh();
     }
   }

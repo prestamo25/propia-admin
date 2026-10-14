@@ -3,6 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { setUserPlan, type PlanMotivo } from "@/app/actions";
 import type { PlanEvent } from "@/lib/miembro";
+import { toast } from "@/components/Toaster";
 
 // «Plan» card on /broker/[id] (Franz 2026-09-10: the star-pill popover hid
 // the decision and left no trace). State at a glance, store subscriptions
@@ -149,6 +150,7 @@ export function PlanCard({
       else {
         setOpen(false);
         reset();
+        toast(`Premium para ${name ?? "este miembro"} ${computed ? `hasta el ${fmtDate(computed.toISOString())}` : "sin vencimiento"} ✓`);
       }
     });
   }
@@ -161,6 +163,7 @@ export function PlanCard({
       else {
         setOpen(false);
         reset();
+        toast(`Premium retirado a ${name ?? "este miembro"}`);
       }
     });
   }

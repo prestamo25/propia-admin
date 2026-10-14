@@ -5,6 +5,7 @@ import Link from "next/link";
 import { setReportStatus } from "@/app/actions";
 import { relative } from "@/lib/format";
 import type { ReportRow, ReportsData, ReportStatus, TargetType } from "@/lib/reports";
+import { toast } from "@/components/Toaster";
 
 const TARGET: Record<TargetType, { label: string; cls: string }> = {
   property: { label: "Propiedad", cls: "bg-emerald-50 text-emerald-700 ring-emerald-200" },
@@ -118,7 +119,13 @@ function ReportCard({ report: r }: { report: ReportRow }) {
   const set = (status: ReportStatus) =>
     startTransition(async () => {
       const res = await setReportStatus(r.id, status);
-      if (res?.error) alert(res.error);
+      if (res?.error) toast(res.error, { tone: "error" });
+      else {
+        const before = r.status;
+        toast(status === "open" ? "Reporte reabierto" : status === "actioned" ? "Reporte marcado como revisado" : "Reporte descartado", {
+          undo: () => setReportStatus(r.id, before),
+        });
+      }
     });
 
   return (

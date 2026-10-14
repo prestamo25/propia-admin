@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { rejectVerification, revokeVerification, verifyMember } from "@/app/actions";
+import { toast } from "@/components/Toaster";
 
 // Decision buttons for the «Verificado» check. Same language as
 // ApproveButton: one confirm for the yes, a reason picker for the no — the
@@ -46,7 +47,8 @@ export function VerifyButtons({
     if (!ok) return;
     startTransition(async () => {
       const res = await verifyMember(id);
-      if (res?.error) alert(res.error);
+      if (res?.error) toast(res.error, { tone: "error" });
+      else toast(`${name ?? "La cuenta"} ya lleva la palomita azul ✓`);
     });
   }
 
@@ -57,8 +59,11 @@ export function VerifyButtons({
         mode === "pending"
           ? await rejectVerification(id, finalReason)
           : await revokeVerification(id, finalReason);
-      if (res?.error) alert(res.error);
-      else setAsking(false);
+      if (res?.error) toast(res.error, { tone: "error" });
+      else {
+        setAsking(false);
+        toast(mode === "pending" ? `Verificación rechazada · ${first} verá el motivo` : `Verificación retirada · ${first} verá el motivo`);
+      }
     });
   }
 

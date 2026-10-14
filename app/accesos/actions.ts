@@ -192,3 +192,19 @@ export async function unlockPhone(phone: string): Promise<Result> {
   refresh();
   return {};
 }
+
+// «Deshacer» right after «Quitar» (UI/UX batch B, 2026-10-14): within 5
+// minutes the access comes back exactly as it was. Same permission as taking
+// it away.
+export async function restoreAccess(id: string): Promise<Result> {
+  const g = await grantRow(id);
+  if (!g) return { error: "No encontré ese acceso." };
+  const actor = g.rol === "regional" ? await grantor() : await owner();
+  if (!actor) return { error: "No puedes restaurar este acceso." };
+  const { data, error } = await supabaseAdmin().rpc("admin_access_restore", { p_id: id, p_actor: actor.label });
+  if (error) return { error: error.message };
+  if (!data) return { error: "Ya no se puede deshacer (pasaron más de 5 minutos o ya tiene otro acceso)." };
+  await audit(actor, "acceso_restaurar", { tipo: "acceso", id, label: g.nombre });
+  refresh(g.user_id);
+  return {};
+}

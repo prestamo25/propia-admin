@@ -113,11 +113,17 @@ export function ZonasClient({
   listings,
   demand,
   readOnly = false,
+  initialEstado = null,
+  initialZona = null,
 }: {
   states: string[];
   listings: ZonaPoint[];
   demand: DemandPoint[];
   readOnly?: boolean;
+  // Deep link (?estado=&zona=, e.g. from the panel's search): open on that
+  // estado with that zone selected and framed.
+  initialEstado?: string | null;
+  initialZona?: string | null;
 }) {
   const mapEl = useRef<HTMLDivElement>(null);
   const map = useRef<google.maps.Map | null>(null);
@@ -135,7 +141,13 @@ export function ZonasClient({
   const [authFail, setAuthFail] = useState(false);
   const [zoom, setZoom] = useState(11);
 
-  const [estado, setEstado] = useState<string>(states.includes("Puebla") ? "Puebla" : (states[0] ?? ""));
+  const [estado, setEstado] = useState<string>(
+    initialEstado && states.includes(initialEstado)
+      ? initialEstado
+      : states.includes("Puebla")
+        ? "Puebla"
+        : (states[0] ?? ""),
+  );
   const [zonas, setZonas] = useState<MapZona[] | null>(null);
   const [zLoading, setZLoading] = useState(!!estado);
   const [zError, setZError] = useState<string | null>(null);
@@ -146,7 +158,7 @@ export function ZonasClient({
   const [showColonias, setShowColonias] = useState(true);
   const [coloniasNote, setColoniasNote] = useState<string | null>(null);
   const [fuera, setFuera] = useState(false);
-  const [selected, setSelected] = useState<string | null>(null);
+  const [selected, setSelected] = useState<string | null>(initialZona);
   const [hovered, setHovered] = useState<string | null>(null);
   const [panelOpen, setPanelOpen] = useState(false); // below lg only
 
@@ -933,7 +945,9 @@ export function ZonasClient({
     }
   }, [ready, kinds, selected, hovered, zoom, zonas, edit]);
 
-  // Selecting a zone (map, list, or a link in its card) frames it.
+  // Selecting a zone (map, list, a link in its card, or a deep link) frames it
+  // — once its shape is loaded, which for a deep link comes after the map.
+  const selectedShapeReady = !!(selected && shapes.get(selected));
   useEffect(() => {
     const m = map.current;
     const sh = selected ? shapes.get(selected) : null;
@@ -943,8 +957,8 @@ export function ZonasClient({
     google.maps.event.addListenerOnce(m, "idle", () => {
       if ((m.getZoom() ?? 0) > 16) m.setZoom(16);
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- only when the selection changes
-  }, [selected, ready]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only when the selection (or its shape) changes
+  }, [selected, ready, selectedShapeReady]);
 
   // INEGI outlines: switching on (or a new estado) loads the current view.
   useEffect(() => {

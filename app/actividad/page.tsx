@@ -55,6 +55,7 @@ const VERB: Record<string, string> = {
   veredicto_reabierto: "reabrió un veredicto de zona",
   acceso_regional: "dio acceso regional a",
   acceso_quitar: "quitó el acceso de",
+  acceso_restaurar: "deshizo el retiro del acceso de",
   acceso_renovar: "renovó el acceso de",
   equipo_rol: "cambió el rol en el equipo de",
   equipo_quitar: "sacó del equipo a",

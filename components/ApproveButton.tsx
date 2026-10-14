@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { approveUser, approveUserAs, rejectUser } from "@/app/actions";
 import { PROFILE_TYPE_LABEL, tierOf } from "@/lib/profileTypes";
+import { toast } from "@/components/Toaster";
 
 // Common reasons, one tap. «Otro» opens free text — the reason is what the
 // applicant will be shown on their pending screen, so it must be a sentence
@@ -87,7 +88,8 @@ export function ApproveButton({
     if (!ok) return;
     startTransition(async () => {
       const res = await approveUser(id);
-      if (res?.error) alert(res.error);
+      if (res?.error) toast(res.error, { tone: "error" });
+      else toast(`${name ?? "La cuenta"} quedó aprobada ✓`);
     });
   }
 
@@ -108,7 +110,8 @@ export function ApproveButton({
     if (!ok) return;
     startTransition(async () => {
       const res = await approveUserAs(id, type);
-      if (res?.error) alert(res.error);
+      if (res?.error) toast(res.error, { tone: "error" });
+      else toast(`${name ?? "La cuenta"} quedó aprobada como ${label} ✓`);
     });
   }
 
@@ -116,8 +119,11 @@ export function ApproveButton({
     if (finalReason.trim().length < 3) return;
     startTransition(async () => {
       const res = await rejectUser(id, finalReason);
-      if (res?.error) alert(res.error);
-      else setAsking(false);
+      if (res?.error) toast(res.error, { tone: "error" });
+      else {
+        setAsking(false);
+        toast(`Rechazada · ${first} verá el motivo en la app`);
+      }
     });
   }
 

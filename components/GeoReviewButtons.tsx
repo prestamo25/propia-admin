@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { acceptGeoReview, keepGeoReview } from "@/app/actions";
+import { toast } from "@/components/Toaster";
 
 // Two decisions, one tap each. «Usar sugerida» rewrites the listing's location
 // to what the resolver proposed; «Dejar como está» closes the case and the
@@ -16,7 +17,10 @@ export function GeoReviewButtons({ id, hasSuggestion }: { id: string; hasSuggest
       setError(null);
       const res = await fn(id);
       if (res.error) setError(res.error);
-      else setDone(result);
+      else {
+        setDone(result);
+        toast(result === "accepted" ? "Ubicación actualizada ✓" : "Se dejó como estaba");
+      }
     });
 
   if (done) {

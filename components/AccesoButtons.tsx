@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { closeSessions, revokeAccess, setTeamRole, unlockPhone } from "@/app/accesos/actions";
+import { closeSessions, restoreAccess, revokeAccess, setTeamRole, unlockPhone } from "@/app/accesos/actions";
+import { toast } from "@/components/Toaster";
 
 // The Accesos page's buttons (team login, 2026-10-13). Each one is a server
 // action that re-checks who may do it — hiding a button is only courtesy.
@@ -35,7 +36,10 @@ export function TeamRoleSelect({ userId, rol }: { userId: string; rol: "admin" |
         value={rol}
         disabled={pending}
         aria-label="Rol"
-        onChange={(e) => run(() => setTeamRole({ userId, rol: e.target.value as "admin" | "equipo" }))}
+        onChange={(e) => {
+          const next = e.target.value as "admin" | "equipo";
+          run(() => setTeamRole({ userId, rol: next }), () => toast(`Ahora es ${next === "admin" ? "Admin" : "Equipo"}: tendrá que volver a entrar ✓`));
+        }}
         className="rounded-lg border border-neutral-200 bg-white px-2.5 py-1.5 text-sm text-neutral-800"
       >
         <option value="admin">Admin</option>
@@ -54,7 +58,10 @@ export function CloseSessionsButton({ id }: { id: string }) {
       <button
         type="button"
         disabled={pending || done}
-        onClick={() => run(() => closeSessions(id), () => setDone(true))}
+        onClick={() => run(() => closeSessions(id), () => {
+          setDone(true);
+          toast("Sesiones cerradas: la próxima vez le pediremos el código de WhatsApp");
+        })}
         title="Saca a esta persona de todas las computadoras donde tenga sesión abierta y olvida sus dispositivos de confianza (la próxima vez le pedirá el código de WhatsApp)"
         className={`${SMALL} text-neutral-600 ring-neutral-200 hover:bg-neutral-50`}
       >
@@ -74,7 +81,10 @@ export function RevokeButton({ id, label }: { id: string; label: string }) {
       <button
         type="button"
         disabled={pending}
-        onClick={() => run(() => revokeAccess(id), () => setConfirm(false))}
+        onClick={() => run(() => revokeAccess(id), () => {
+          setConfirm(false);
+          toast("Acceso retirado", { undo: () => restoreAccess(id) });
+        })}
         className={`${SMALL} bg-rose-600 text-white ring-rose-600 hover:opacity-90`}
       >
         Sí, quitar
@@ -98,7 +108,7 @@ export function UnlockButton({ phone }: { phone: string }) {
       <button
         type="button"
         disabled={pending}
-        onClick={() => run(() => unlockPhone(phone))}
+        onClick={() => run(() => unlockPhone(phone), () => toast("Desbloqueado: ya puede volver a intentar"))}
         className={`${SMALL} text-neutral-700 ring-neutral-200 hover:bg-neutral-50`}
       >
         Desbloquear
@@ -116,7 +126,10 @@ export function AddTeamForm() {
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        run(() => setTeamRole({ phone10: phone, rol }), () => setPhone(""));
+        run(() => setTeamRole({ phone10: phone, rol }), () => {
+          setPhone("");
+          toast(`Agregado al equipo como ${rol === "admin" ? "Admin" : "Equipo"} ✓`);
+        });
       }}
       className="flex flex-wrap items-center gap-2"
     >

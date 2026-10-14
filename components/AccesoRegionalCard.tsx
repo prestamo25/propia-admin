@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { grantAccess, renewAccess, revokeAccess } from "@/app/accesos/actions";
+import { grantAccess, renewAccess, restoreAccess, revokeAccess } from "@/app/accesos/actions";
 import type { AccessRow } from "@/lib/accesos";
 import {
   DEFAULT_VIGENCIA,
@@ -12,6 +12,7 @@ import {
 } from "@/lib/accesoShared";
 import { fmtDate, relative } from "@/lib/format";
 import { ROL_LABEL } from "@/lib/auth";
+import { toast } from "@/components/Toaster";
 
 // «Acceso al panel» card on /broker/[id] (acceso regional, Franz + Pablo
 // 2026-10-13): give this member read-only access to chosen sections of the
@@ -64,7 +65,10 @@ export function AccesoRegionalCard({
     startTransition(async () => {
       const res = await grantAccess({ userId, estados, secciones, verTelefonos, dias });
       if (res.error) setError(res.error);
-      else setOpen(false);
+      else {
+        setOpen(false);
+        toast(`${access ? "Acceso actualizado" : "Acceso al panel otorgado"}: ${estados.join(", ")} · ${dias} días ✓`);
+      }
     });
   }
 
@@ -74,6 +78,7 @@ export function AccesoRegionalCard({
     startTransition(async () => {
       const res = await renewAccess(access.id, DEFAULT_VIGENCIA, userId);
       if (res.error) setError(res.error);
+      else toast(`Acceso renovado por ${DEFAULT_VIGENCIA} días ✓`);
     });
   }
 
@@ -81,8 +86,10 @@ export function AccesoRegionalCard({
     if (!access) return;
     setError(null);
     startTransition(async () => {
-      const res = await revokeAccess(access.id, userId);
+      const id = access.id;
+      const res = await revokeAccess(id, userId);
       if (res.error) setError(res.error);
+      else toast(`Acceso al panel retirado a ${name ?? "este miembro"}`, { undo: () => restoreAccess(id) });
       setConfirmRevoke(false);
     });
   }

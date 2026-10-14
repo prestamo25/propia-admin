@@ -11,8 +11,13 @@ export const dynamic = "force-dynamic";
 // what each zone holds and to show, on demand, the ones no zone covers; the
 // zones themselves are fetched per estado by the client.
 // A regional viewer (2026-10-13) gets their estados only, read-only.
-export default async function ZonasPage() {
+export default async function ZonasPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ estado?: string; zona?: string }>;
+}) {
   const viewer = await requireViewer("zonas");
+  const sp = await searchParams;
   const readOnly = isRegional(viewer);
 
   let data;
@@ -43,7 +48,14 @@ export default async function ZonasPage() {
     // exactly one screen tall: the map never scrolls away, only the panel's list does
     <div className="flex h-dvh flex-col overflow-hidden">
       <TopNav active="zonas" />
-      <ZonasClient states={data.states} listings={listings} demand={demand} readOnly={readOnly} />
+      <ZonasClient
+        states={data.states}
+        listings={listings}
+        demand={demand}
+        readOnly={readOnly}
+        initialEstado={sp.estado ?? null}
+        initialZona={sp.zona ?? null}
+      />
     </div>
   );
 }
