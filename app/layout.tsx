@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { DM_Sans, Geist_Mono } from "next/font/google";
+import { Suspense } from "react";
+import { NavProgress } from "@/components/NavProgress";
 import "./globals.css";
 
 // DM Sans — the app's typeface; the panel speaking the same voice is half
@@ -30,7 +32,12 @@ export default function RootLayout({
       lang="es"
       className={`${dmSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full">{children}</body>
+      <body className="min-h-full">
+        <Suspense fallback={null}>
+          <NavProgress />
+        </Suspense>
+        {children}
+      </body>
     </html>
   );
 }

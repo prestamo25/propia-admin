@@ -8,6 +8,7 @@ import { fmtWhen } from "@/lib/eventos";
 import { TopNav } from "@/components/TopNav";
 import { LivePulse } from "@/components/LivePulse";
 import { getRole } from "@/lib/session";
+import { fetchAtencion, type AtencionItem } from "@/lib/atencion";
 import { requireRole } from "@/lib/session";
 
 // Always fetch fresh — this is an ops view, never cache it.
@@ -353,6 +354,48 @@ function Total({ label, value }: { label: string; value: number }) {
   );
 }
 
+const TONE_DOT: Record<AtencionItem["tone"], string> = {
+  rose: "bg-rose-500",
+  amber: "bg-amber-500",
+  sky: "bg-sky-500",
+  neutral: "bg-neutral-300",
+};
+
+// «Atención hoy»: what is waiting on the team, first thing on the page.
+function Atencion({ items }: { items: AtencionItem[] }) {
+  return (
+    <section className="mb-6 rounded-2xl border border-black/[0.05] bg-white p-5 shadow-soft">
+      <div className="flex items-baseline justify-between gap-3">
+        <h2 className="text-sm font-semibold text-neutral-900">Atención hoy</h2>
+        {items.length ? (
+          <span className="text-xs tabular-nums text-neutral-400">
+            {items.length} {items.length === 1 ? "pendiente" : "pendientes"}
+          </span>
+        ) : null}
+      </div>
+      {items.length === 0 ? (
+        <p className="mt-2 flex items-center gap-2 text-sm text-emerald-700">
+          <span aria-hidden>✓</span> Todo al día: nada espera por el equipo.
+        </p>
+      ) : (
+        <ul className="mt-1 divide-y divide-black/[0.04]">
+          {items.map((i) => (
+            <li key={i.key}>
+              <Link href={i.href} className="group flex items-center gap-3 py-2.5 text-sm text-neutral-800">
+                <span className={`h-2 w-2 shrink-0 rounded-full ${TONE_DOT[i.tone]}`} />
+                <span className="min-w-0 flex-1 group-hover:text-brand">{i.text}</span>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-neutral-300 group-hover:text-brand" aria-hidden>
+                  <path d="m9 18 6-6-6-6" />
+                </svg>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 export default async function InicioPage() {
   await requireRole("admin");
   const role = await getRole();
@@ -381,6 +424,12 @@ export default async function InicioPage() {
     );
   }
 
+  const atencion = await fetchAtencion({
+    role: role ?? "admin",
+    receiptsWaiting: data.receiptsWaiting,
+    emptyUpcoming: data.emptyUpcoming,
+  });
+
   const rawToday = new Date().toLocaleDateString("es-MX", {
     timeZone: "America/Mexico_City",
     weekday: "long",
@@ -401,13 +450,15 @@ export default async function InicioPage() {
           <p className="mt-1 text-sm text-neutral-500">{today}</p>
         </div>
 
+        <Atencion items={atencion} />
+
         {/* LIVE operations — polls /api/pulse every 20 s, seeded server-side
             so the dashboard never shows a loading state. */}
         <LivePulse initial={pulse} />
 
-        {/* Today's events + what needs a hand — only rendered when there is
-            something to show, so a quiet day stays quiet. */}
-        {data.eventsToday.length > 0 || data.tomorrowRegistrations > 0 || data.receiptsWaiting > 0 || data.emptyUpcoming.length > 0 ? (
+        {/* Today's events — only rendered when there is something to show, so
+            a quiet day stays quiet. (What needs a hand moved up to «Atención hoy».) */}
+        {data.eventsToday.length > 0 || data.tomorrowRegistrations > 0 ? (
           <section className="mt-8 grid grid-cols-1 gap-3 lg:grid-cols-2">
             {data.eventsToday.length > 0 || data.tomorrowRegistrations > 0 ? (
               <div className="rounded-2xl border border-black/[0.05] bg-white p-5 shadow-soft">
@@ -439,26 +490,6 @@ export default async function InicioPage() {
                 {data.tomorrowRegistrations > 0 ? (
                   <p className="mt-3 text-xs text-neutral-500">Mañana: {data.tomorrowRegistrations} inscritos en total.</p>
                 ) : null}
-              </div>
-            ) : null}
-            {data.receiptsWaiting > 0 || data.emptyUpcoming.length > 0 ? (
-              <div className="rounded-2xl border border-black/[0.05] bg-white p-5 shadow-soft">
-                <h2 className="text-sm font-semibold text-neutral-900">Necesita una mano</h2>
-                <ul className="mt-3 space-y-2 text-sm">
-                  {data.receiptsWaiting > 0 ? (
-                    <li className="flex items-center gap-2 text-neutral-800">
-                      <span className="h-2 w-2 shrink-0 rounded-full bg-amber-500" />
-                      {data.receiptsWaiting === 1 ? "1 comprobante de pago espera aprobación del organizador" : `${data.receiptsWaiting} comprobantes de pago esperan aprobación de sus organizadores`}
-                    </li>
-                  ) : null}
-                  {data.emptyUpcoming.map((e) => (
-                    <li key={e.id} className="flex items-center gap-2 text-neutral-800">
-                      <span className="h-2 w-2 shrink-0 rounded-full bg-neutral-300" />
-                      <Link href={`/eventos/${e.id}`} className="min-w-0 truncate hover:text-brand">«{e.title}»</Link>
-                      <span className="shrink-0 text-xs text-neutral-500">{fmtWhen(e.start_at, null)} · sin inscritos</span>
-                    </li>
-                  ))}
-                </ul>
               </div>
             ) : null}
           </section>

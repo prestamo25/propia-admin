@@ -79,7 +79,9 @@ function Row({ r }: { r: GeoReviewRow }) {
 }
 
 export default async function UbicacionesPage() {
-  await requireRole("dev"); // técnico only for now — Pablo gets it once the queue proves itself
+  // Open to the whole team since 2026-10-14 (UI/UX batch A): the queue proved
+  // itself and it now shows up in Inicio's «Atención hoy».
+  await requireRole("admin");
 
   let rows: GeoReviewRow[];
   try {

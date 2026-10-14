@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 export type ReportStatus = "open" | "actioned" | "dismissed";
@@ -124,7 +125,8 @@ export async function fetchReports(): Promise<ReportsData> {
   };
 }
 
-export async function countOpenReports(): Promise<number> {
+// Once per request: the top bar and Inicio's «Atención hoy» both ask.
+export const countOpenReports = cache(async (): Promise<number> => {
   try {
     const sb = supabaseAdmin();
     const { count } = await sb
@@ -135,4 +137,4 @@ export async function countOpenReports(): Promise<number> {
   } catch {
     return 0;
   }
-}
+});

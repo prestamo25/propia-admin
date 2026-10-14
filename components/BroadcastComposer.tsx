@@ -3,6 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { sendBroadcast } from "@/app/actions";
+import { startNavProgress } from "@/components/NavProgress";
 
 // El compositor de avisos masivos. La pieza que más importa no es el textarea
 // sino el CONTEO: es la última oportunidad de notar que el filtro está mal
@@ -36,6 +37,7 @@ export function BroadcastComposer({
     const q = new URLSearchParams();
     if (next.estado) q.set("estado", next.estado);
     if (next.tier) q.set("tier", next.tier);
+    startNavProgress();
     router.push(`/avisos${q.toString() ? `?${q}` : ""}`);
   };
   const [body, setBody] = useState("");

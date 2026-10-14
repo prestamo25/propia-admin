@@ -18,6 +18,7 @@ export type MemberRow = Omit<BrokerRow, "whatsapp_opt_in" | "mb_used" | "plan_so
 // 1,643 members in both layouts was 9 MB of HTML before the page could open.
 const PAGE = 100;
 import { BlockButton } from "@/components/BlockButton";
+import { startNavProgress } from "@/components/NavProgress";
 import { StatCard } from "@/components/StatCard";
 import {
   INACTIVE_DAYS,
@@ -374,7 +375,10 @@ export function BrokerTable({
           return (
             <li
               key={b.id}
-              onClick={() => router.push(`/broker/${b.id}`)}
+              onClick={() => {
+                startNavProgress();
+                router.push(`/broker/${b.id}`);
+              }}
               className="flex cursor-pointer items-center gap-3 px-4 py-3 transition-colors active:bg-neutral-50"
             >
               {b.avatar_url ? (
@@ -518,7 +522,10 @@ export function BrokerTable({
               return (
                 <tr
                   key={b.id}
-                  onClick={() => router.push(`/broker/${b.id}`)}
+                  onClick={() => {
+                startNavProgress();
+                router.push(`/broker/${b.id}`);
+              }}
                   className="group cursor-pointer transition-colors hover:bg-brand-light/50"
                 >
                   {/* min-w floors the name column so the fixed-width stat

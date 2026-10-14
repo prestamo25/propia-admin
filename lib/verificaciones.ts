@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { supabaseAdmin } from "./supabaseAdmin";
 import { pageAll } from "./pageAll";
 
@@ -167,7 +168,8 @@ export async function fetchMemberVerification(id: string): Promise<{
 }
 
 // Nav badge: requests waiting for a decision.
-export async function countPendingVerifications(): Promise<number> {
+// Once per request: the top bar and Inicio's «Atención hoy» both ask.
+export const countPendingVerifications = cache(async (): Promise<number> => {
   const sb = supabaseAdmin();
   const { count } = await sb
     .from("users")
@@ -175,4 +177,4 @@ export async function countPendingVerifications(): Promise<number> {
     .eq("verification_status", "pending")
     .eq("status", "approved");
   return count ?? 0;
-}
+});

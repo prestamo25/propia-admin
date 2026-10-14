@@ -98,6 +98,7 @@ export const NAV: NavEntry[] = [
       { key: "salidas", href: "/salidas", label: "Salidas" },
       { key: "mapa", href: "/mapa", label: "Mapa" },
       { key: "zonas", href: "/zonas", label: "Zonas" },
+      { key: "ubicaciones", href: "/ubicaciones", label: "Ubicaciones" },
       // Acceso regional (2026-10-13): who outside the team sees what.
       { key: "accesos", href: "/accesos", label: "Accesos" },
     ],
@@ -111,7 +112,6 @@ export const NAV: NavEntry[] = [
       { key: "whatsapp", href: "/whatsapp", label: "WhatsApp" },
       { key: "almacenamiento", href: "/almacenamiento", label: "Almacenamiento" },
       { key: "lifecycle", href: "/lifecycle", label: "Ciclo de vida" },
-      { key: "ubicaciones", href: "/ubicaciones", label: "Ubicaciones" },
       // Team login (2026-10-13): what each person did in the panel — the
       // dueño's view, so it lives in his menu.
       { key: "actividad", href: "/actividad", label: "Actividad del equipo" },

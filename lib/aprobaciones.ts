@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { supabaseAdmin } from "./supabaseAdmin";
 import { pageAll } from "./pageAll";
 
@@ -122,11 +123,12 @@ export async function fetchPendingUsers(): Promise<PendingUser[]> {
 }
 
 // Nav badge counts only what needs a decision — rejected accounts are done.
-export async function countPendingUsers(): Promise<number> {
+// Once per request: the top bar and Inicio's «Atención hoy» both ask.
+export const countPendingUsers = cache(async (): Promise<number> => {
   const sb = supabaseAdmin();
   const { count } = await sb
     .from("users")
     .select("id", { count: "exact", head: true })
     .eq("status", "pending");
   return count ?? 0;
-}
+});

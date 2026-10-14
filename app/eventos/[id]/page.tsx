@@ -2,6 +2,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ParticipantsTable } from "@/components/ParticipantsTable";
 import { requireRole } from "@/lib/session";
+import { TopNav } from "@/components/TopNav";
+import { BackBar } from "@/components/BackBar";
 import {
   ATTENDEE_STATUS_LABEL,
   EVENT_TYPE_LABEL,
@@ -33,14 +35,12 @@ export default async function EventoPage({ params }: { params: Promise<{ id: str
 
   return (
     <div className="min-h-screen">
-      <header className="sticky top-0 z-20 border-b border-black/[0.05] bg-white/65 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6">
-          <Link href="/eventos" className="inline-flex items-center gap-1.5 text-sm font-medium text-neutral-600 hover:text-brand">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
-              <path d="m15 18-6-6 6-6" />
-            </svg>
-            Eventos
-          </Link>
+      <TopNav active="eventos" />
+      <BackBar
+        href="/eventos"
+        label="Eventos"
+        width="max-w-7xl"
+        right={
           <a
             href={`/api/export/evento?id=${ev.id}`}
             className="inline-flex items-center gap-1.5 rounded-lg border border-brand/25 bg-white px-3 py-1.5 text-sm font-medium text-brand shadow-sm transition hover:bg-brand-light"
@@ -52,10 +52,10 @@ export default async function EventoPage({ params }: { params: Promise<{ id: str
             </svg>
             Excel de participantes
           </a>
-        </div>
-      </header>
+        }
+      />
 
-      <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8">
+      <main className="mx-auto max-w-7xl px-4 pb-8 pt-4 sm:px-6">
         <section className="mb-6 flex flex-col gap-5 rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/[0.05] sm:flex-row">
           {ev.image_url ? (
             // eslint-disable-next-line @next/next/no-img-element

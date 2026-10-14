@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 // «Ubicaciones dudosas» — the human half of the metro plan (2026-09-07). The
@@ -84,7 +85,8 @@ export async function fetchGeoReview(): Promise<GeoReviewRow[]> {
   }));
 }
 
-export async function countGeoReview(): Promise<number> {
+// Once per request: the top bar and Inicio's «Atención hoy» both ask.
+export const countGeoReview = cache(async (): Promise<number> => {
   const sb = supabaseAdmin();
   const { count, error } = await sb
     .from("geo_review")
@@ -92,4 +94,4 @@ export async function countGeoReview(): Promise<number> {
     .eq("status", "pending");
   if (error) return 0;
   return count ?? 0;
-}
+});
