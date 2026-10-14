@@ -16,10 +16,12 @@ import {
 
 // Grouped nav (2026-09-28): Inicio · Miembros · Aprobaciones · Verificaciones (10-06) · Reportes ·
 // Eventos ▾ · Avisos · Datos ▾ · Técnico ▾ — the entries live in lib/nav.ts.
-// The old fold-into-«Más» tiers are gone: below navmd (1000px) the tabs just
-// tighten (px-2, no brand word / role badge / «Grupo · Página» hint, Salir →
-// icon) so all eight fit down to navsm (840px). A group's trigger carries the
-// sum of its badges. Below navsm = MobileNav drawer.
+// The old fold-into-«Más» tiers are gone: below navmd (1280px) the tabs just
+// tighten (px-2, no brand word / role badge, Salir → icon) so all of them fit
+// down to navsm (1024px). A group's trigger carries the sum of its badges.
+// Below navsm = MobileNav drawer. The «Grupo · Página» hint is gone too
+// (2026-10-14): «Técnico · Actividad del equipo» never fit, and the tabs ran
+// under Buscar/Salir — the highlighted group and the page title say it.
 
 // Build stamp baked in by deploy-admin.sh — shown at the foot of the
 // «Técnico» menu so what is live is never a guess (same values as
@@ -148,11 +150,6 @@ export async function TopNav({ active }: { active: NavKey }) {
     const name = (
       <>
         {label}
-        {current && current.label !== label ? (
-          <span className="hidden font-normal text-neutral-400 navmd:inline">
-            · {current.label}
-          </span>
-        ) : null}
         {badge(total)}
       </>
     );
@@ -214,7 +211,7 @@ export async function TopNav({ active }: { active: NavKey }) {
   return (
     <header className="sticky top-0 z-20 border-b border-black/[0.05] bg-white/65 backdrop-blur-xl">
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
-        <div className="flex min-w-0 items-center gap-5">
+        <div className="flex min-w-0 items-center gap-3 navmd:gap-5">
           <div className="flex shrink-0 items-center gap-2.5">
             <Link
               href={home}

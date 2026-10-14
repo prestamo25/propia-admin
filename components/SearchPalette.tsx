@@ -6,8 +6,9 @@ import { useRouter } from "next/navigation";
 import { startNavProgress } from "@/components/NavProgress";
 import { avatarColors, fmtPhone, initials } from "@/lib/format";
 
-// Search from anywhere (Franz 2026-10-14, UI/UX batch B). «Buscar» in the top
-// bar, ⌘K / Ctrl+K, or «/» anywhere outside a text field: one box that finds
+// Search from anywhere (Franz 2026-10-14, UI/UX batch B). The magnifier in the
+// top bar (icon only: with the «Buscar ⌘K» label the dueño's tabs ran under
+// it), ⌘K / Ctrl+K, or «/» anywhere outside a text field: one box that finds
 // a member by name, company or phone, an event, a zone — and the panel's own
 // pages by name — and jumps there. Server side: /api/buscar → admin_search().
 
@@ -168,14 +169,12 @@ export function SearchPalette({ pages }: { pages: { href: string; label: string 
         onClick={() => setOpen(true)}
         aria-label="Buscar"
         title="Buscar (⌘K)"
-        className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-neutral-500 ring-1 ring-neutral-200 transition hover:bg-white hover:text-neutral-800 navmd:flex navmd:w-auto navmd:gap-2 navmd:px-3"
+        className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-neutral-500 ring-1 ring-neutral-200 transition hover:bg-white hover:text-neutral-800"
       >
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
           <circle cx="11" cy="11" r="7" />
           <path d="m20 20-3.5-3.5" />
         </svg>
-        <span className="hidden text-sm font-medium navmd:inline">Buscar</span>
-        <kbd className="hidden rounded border border-neutral-200 px-1 text-[11px] font-medium text-neutral-400 navmd:inline">⌘K</kbd>
       </button>
 
       {open
