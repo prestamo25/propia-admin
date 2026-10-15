@@ -53,7 +53,7 @@ export function CapturesList({
 
       {captures.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-neutral-200 bg-white/50 py-16 text-center text-sm text-neutral-400">
-          Sin capturas en esta región.
+          Sin capturas en este estado.
         </div>
       ) : (
         <div className="space-y-3">
@@ -135,15 +135,11 @@ function CaptureCard({ c }: { c: Capture }) {
         <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset ${kindMeta.cls}`}>
           {kindMeta.label}
         </span>
-        {c.promoted ? (
+        {c.claimed ? (
           <span className="rounded-full bg-brand-light px-2 py-0.5 text-[11px] font-medium text-brand ring-1 ring-inset ring-brand/20">
-            ✓ Promovida
+            ✓ Reclamada
           </span>
-        ) : (
-          <span className="rounded-full bg-neutral-50 px-2 py-0.5 text-[11px] font-medium text-neutral-500 ring-1 ring-inset ring-neutral-200">
-            {c.review_status ?? "sin promover"}
-          </span>
-        )}
+        ) : null}
         {c.image_count > 0 ? (
           <span className="text-[11px] text-neutral-400">📷 {c.image_count}</span>
         ) : null}

@@ -1,24 +1,15 @@
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
-// WhatsApp group → state/region. As you spin up one group per state, add a line
-// here (group JID → state). Captures from unmapped groups fall back to their
-// group name (admin_bot_monitor applies the map). Could become a DB table later
-// if you'd rather not redeploy.
-const GROUP_REGIONS: Record<string, string> = {
-  "120363428754679761@g.us": "Puebla", // Propia AI TEST
-};
-
 export type Capture = {
   id: string;
   captured_at: string | null;
-  region: string;
+  region: string; // estado, from wa_groups.state («Sin estado» when untagged)
   group_name: string | null;
   sender_name: string | null;
   contact_phone: string | null;
   kind: string | null; // oferta / demanda / ruido
-  review_status: string | null;
   image_count: number;
-  promoted: boolean;
+  claimed: boolean; // a broker turned it into a property with «Reclámala»
   title: string | null;
   price: number | null;
   currency: string | null;
@@ -31,7 +22,7 @@ export type Capture = {
 export type RegionStat = {
   region: string;
   total: number;
-  promoted: number;
+  claimed: number;
   lastCapturedAt: string | null;
 };
 
@@ -40,11 +31,11 @@ export type BotMonitor = {
   byRegion: RegionStat[];
   kpis: {
     total: number;
-    promoted: number;
-    pending: number;
+    today: number; // new captures today (CDMX), by created_at
+    states: number;
+    claimed: number; // every claimed capture, also ones no longer stored
     oferta: number;
     demanda: number;
-    regions: number;
   };
   lastCapturedAt: string | null;
   // Captures in the chosen region (all of them when no region): `captures`
@@ -60,9 +51,11 @@ export const CAPTURES_PAGE = 100;
 // up. Until 2026-10-13 this read every wa_listings row with its body, images
 // and extracted JSON and shipped all of them to the browser — 25 MB and 12 s
 // at 10k captures, ~1,250 more a day, heading for Lambda's 6 MB cap.
+// v2 (admin-bot-monitor-v2-2026-10-15.sql): regions are estados from
+// wa_groups, «Reclamadas» replaces «Promovidas» (source 'whatsapp' = 0 forever)
+// and «Hoy» replaces «Pendientes» (review_status never leaves 'pending').
 export async function fetchBotMonitor(region: string | null, limit: number): Promise<BotMonitor> {
   const { data, error } = await supabaseAdmin().rpc("admin_bot_monitor", {
-    p_group_regions: GROUP_REGIONS,
     p_region: region,
     p_limit: limit,
   });

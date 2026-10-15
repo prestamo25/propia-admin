@@ -56,7 +56,7 @@ export default async function WhatsAppPage({
             WhatsApp · Bot
           </h1>
           <p className="mt-1 text-sm text-neutral-500">
-            Capturas del bot por región y su promoción al inventario.
+            Capturas del bot por estado y cuántas reclamaron los brokers.
           </p>
         </div>
 
@@ -90,9 +90,9 @@ export default async function WhatsAppPage({
         {/* KPIs */}
         <section className="mb-8 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
           <Kpi label="Capturas" value={kpis.total} dot="#1c4588" />
-          <Kpi label="Regiones" value={kpis.regions} dot="#7c3aed" />
-          <Kpi label="Promovidas" value={kpis.promoted} dot="#059669" />
-          <Kpi label="Pendientes" value={kpis.pending} dot="#d97706" />
+          <Kpi label="Hoy" value={kpis.today} dot="#d97706" />
+          <Kpi label="Estados" value={kpis.states} dot="#7c3aed" />
+          <Kpi label="Reclamadas" value={kpis.claimed} dot="#059669" />
           <Kpi label="Ofertas" value={kpis.oferta} dot="#10b981" />
           <Kpi label="Demandas" value={kpis.demanda} dot="#0e7490" />
         </section>
@@ -100,7 +100,7 @@ export default async function WhatsAppPage({
         {/* by region */}
         <section className="mb-8 rounded-2xl border border-black/[0.05] bg-gradient-to-b from-white to-neutral-50/40 p-5 shadow-soft backdrop-blur-sm">
           <h2 className="mb-4 text-base font-semibold tracking-tight text-neutral-900">
-            Capturas por región
+            Capturas por estado
           </h2>
           <div className="space-y-1">
             {byRegion.map((r) => (
@@ -114,11 +114,11 @@ export default async function WhatsAppPage({
                     style={{ width: `${(r.total / maxRegion) * 100}%` }}
                   />
                 </div>
-                <div className="w-8 shrink-0 text-right text-sm font-semibold tabular-nums text-neutral-800">
-                  {r.total}
+                <div className="w-14 shrink-0 text-right text-sm font-semibold tabular-nums text-neutral-800">
+                  {r.total.toLocaleString("es-MX")}
                 </div>
                 <div className="hidden w-24 shrink-0 text-right text-xs text-neutral-400 sm:block">
-                  {r.promoted} promov.
+                  {r.claimed} reclam.
                 </div>
                 <div className="hidden w-20 shrink-0 text-right text-xs text-neutral-400 sm:block">
                   {relative(r.lastCapturedAt).label}
@@ -155,7 +155,7 @@ function Kpi({ label, value, dot }: { label: string; value: number; dot: string 
         <span className="text-xs text-neutral-500">{label}</span>
       </span>
       <div className="mt-2 text-2xl font-semibold tracking-tight tabular-nums text-neutral-900">
-        {value}
+        {value.toLocaleString("es-MX")}
       </div>
     </div>
   );
